@@ -1,0 +1,4 @@
+# Local development environment variables for Wrangler
+DEV_BYPASS_AUTH=true
+CF_ACCESS_TEAM_DOMAIN=
+CF_ACCESS_AUD=
