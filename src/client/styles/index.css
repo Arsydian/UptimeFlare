@@ -169,15 +169,17 @@ button {
   position: sticky;
   top: 0;
   z-index: 40;
-  height: 60px;
+  min-height: 60px;
+  height: auto;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   border-top: 3px solid var(--cf-orange);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
-  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 20px;
+  gap: 10px 16px;
 }
 
 .cf-navbar-left {
@@ -185,6 +187,7 @@ button {
   align-items: center;
   gap: 14px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .cf-brand {
@@ -1139,5 +1142,48 @@ button {
 
   .form-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .cf-navbar {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .cf-navbar-left {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .cf-nav-divider {
+    display: none;
+  }
+
+  .cf-navbar-right {
+    width: 100%;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .cf-navbar-right .btn-sm {
+    padding: 6px 9px;
+    font-size: 12px;
+  }
+
+  .modal-header {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 14px 16px;
+  }
+
+  .modal-body {
+    padding: 16px;
+  }
+
+  .modal-footer {
+    padding: 12px 16px;
+    flex-wrap: wrap;
   }
 }
