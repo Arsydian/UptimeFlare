@@ -23,10 +23,10 @@ Styled after the **Cloudflare Dashboard UI**, UptimeFlare features a **3-Mode Th
 ### 3. Cloudflare Zero Trust (Cloudflare Access) Security
 - **In-Worker JWT Verification**: Validates the `Cf-Access-Jwt-Assertion` request header on all admin API endpoints (`/api/dashboard`, `/api/monitors/*`, `/api/notifications/*`, `/api/settings`, `/api/backup/*`) using the Web Crypto API (`RSASSA-PKCS1-v1_5` SHA-256) against your organization's public keys at `https://<team-domain>/cdn-cgi/access/certs` and verifies the Application Audience (`aud`) and expiration (`exp`, `nbf`) claims.
 - **In-App or Environment Variable Setup**: Configure your Zero Trust **Team Domain** and **Application Audience (AUD) Tag** directly inside UptimeFlare's **Settings** modal in your browser (stored in Cloudflare D1), or via Cloudflare Worker Variables (`CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD`).
-- **Public & Token Routes**: Leaves `/status`, `/api/public/status`, `/api/health`, and `/api/push/:token` accessible without a Zero Trust JWT so public visitors can view the status page and remote servers can push heartbeats.
+- **Opt-In Public Status Page (`/status`)**: Disabled by default. Can be toggled on at any time in the **Settings** modal.
 
-### 4. Multi-Channel Alerting
-- Supports **Discord** (rich embeds), **Slack** (Block Kit), **Telegram** (`sendMessage` Bot API), **Ntfy.sh**, **Pushover**, and **Generic Custom Webhooks (JSON POST)** with optional custom secret headers.
+### 4. Multi-Channel Alerting (Including Direct SMTP & Email API)
+- Supports **Email via Direct SMTP (`smtp`)** over `cloudflare:sockets` (STARTTLS on ports `587`/`2525` or implicit SSL/TLS on port `465` with `AUTH PLAIN` / `AUTH LOGIN`), **Transactional Email API (`email`)** (Resend and SendGrid), **Discord** (rich embeds), **Slack** (Block Kit), **Telegram** (`sendMessage` Bot API), **Ntfy.sh**, **Pushover**, and **Generic Custom Webhooks (JSON POST)** with optional custom secret headers.
 - Includes a **Send Test Alert** button in the dashboard, consecutive failure retry thresholds (`max_retries`) before opening an incident and alerting `DOWN`, and automatic `UP` recovery alerts with total downtime duration.
 
 ---

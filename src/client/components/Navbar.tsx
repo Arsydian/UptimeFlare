@@ -68,9 +68,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="cf-brand-text">
             <div className="cf-brand-title">
               <span>{settings.site_title || 'UptimeFlare'}</span>
-              <span className="cf-brand-tag">Workers Edge</span>
             </div>
-            <span className="cf-brand-subtitle">Cloudflare D1 • Zero Trust Protected</span>
           </div>
         </div>
 
@@ -150,16 +148,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           <span>{isCheckingAll ? 'Checking...' : 'Check All'}</span>
         </button>
 
-        <a
-          href="/status"
-          id="link-public-status"
-          className="btn btn-sm"
-          style={{ textDecoration: 'none' }}
-          title="View Public Read-Only Status Page"
-        >
-          <ExternalLink size={14} />
-          <span>Status Page</span>
-        </a>
+        {settings.public_status_enabled === 'true' && (
+          <a
+            href="/status"
+            id="link-public-status"
+            className="btn btn-sm"
+            style={{ textDecoration: 'none' }}
+            title="View Public Read-Only Status Page"
+          >
+            <ExternalLink size={14} />
+            <span>Status Page</span>
+          </a>
+        )}
 
         <button
           type="button"

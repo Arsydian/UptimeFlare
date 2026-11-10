@@ -112,7 +112,7 @@ async function ensureSchema(db: D1Database): Promise<void> {
         INSERT OR IGNORE INTO settings (key, value) VALUES
           ('site_title', 'UptimeFlare'),
           ('site_description', 'Cloudflare Edge Infrastructure & Service Status'),
-          ('public_status_enabled', 'true'),
+          ('public_status_enabled', 'false'),
           ('public_announcement', ''),
           ('public_announcement_type', 'info'),
           ('retention_days', '30'),
@@ -138,7 +138,7 @@ async function getSettingsMap(db: D1Database): Promise<Record<string, string>> {
   const out: Record<string, string> = {
     site_title: 'UptimeFlare',
     site_description: 'Cloudflare Edge Infrastructure & Service Status',
-    public_status_enabled: 'true',
+    public_status_enabled: 'false',
     public_announcement: '',
     public_announcement_type: 'info',
     retention_days: '30',

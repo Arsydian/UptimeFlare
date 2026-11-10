@@ -19,7 +19,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     settings.site_description || 'Cloudflare Edge Infrastructure & Service Status'
   );
   const [publicEnabled, setPublicEnabled] = useState(
-    settings.public_status_enabled !== 'false'
+    settings.public_status_enabled === 'true'
   );
   const [announcement, setAnnouncement] = useState(settings.public_announcement || '');
   const [retentionDays, setRetentionDays] = useState(settings.retention_days || '30');
@@ -156,38 +156,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               <div className="form-field full">
-                <label className="form-label">Public Status Page Subtitle</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={siteDescription}
-                  onChange={(e) => setSiteDescription(e.target.value)}
-                />
+                <div className="cf-toggle-card">
+                  <div>
+                    <div className="form-label">Public Read-Only Status Page (/status)</div>
+                    <span className="form-hint">
+                      Disabled by default. Toggle on to allow read-only access to public monitors at{' '}
+                      <code>/status</code>.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={publicEnabled}
+                    id="toggle-public-status"
+                    className={`cf-toggle-switch ${publicEnabled ? 'checked' : ''}`}
+                    onClick={() => setPublicEnabled((prev) => !prev)}
+                  >
+                    <span className="cf-toggle-knob" />
+                  </button>
+                </div>
               </div>
 
-              <div className="form-field full">
-                <label className="form-label">
-                  Public Maintenance / Incident Announcement Banner (Optional)
-                </label>
-                <textarea
-                  rows={2}
-                  className="form-textarea"
-                  placeholder="e.g. Scheduled maintenance on US-East nodes at 02:00 UTC."
-                  value={announcement}
-                  onChange={(e) => setAnnouncement(e.target.value)}
-                />
-              </div>
+              {publicEnabled && (
+                <>
+                  <div className="form-field full">
+                    <label className="form-label">Public Status Page Subtitle</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={siteDescription}
+                      onChange={(e) => setSiteDescription(e.target.value)}
+                    />
+                  </div>
 
-              <div className="form-field full">
-                <label className="form-checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={publicEnabled}
-                    onChange={(e) => setPublicEnabled(e.target.checked)}
-                  />
-                  <span>Enable Public Read-Only Status Page at /status</span>
-                </label>
-              </div>
+                  <div className="form-field full">
+                    <label className="form-label">
+                      Public Maintenance / Incident Announcement Banner (Optional)
+                    </label>
+                    <textarea
+                      rows={2}
+                      className="form-textarea"
+                      placeholder="e.g. Scheduled maintenance on US-East nodes at 02:00 UTC."
+                      value={announcement}
+                      onChange={(e) => setAnnouncement(e.target.value)}
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)' }} />

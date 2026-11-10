@@ -1,6 +1,14 @@
 export type MonitorType = 'http' | 'keyword' | 'json-query' | 'tcp' | 'dns' | 'push';
 export type MonitorStatus = 'up' | 'down' | 'degraded' | 'paused' | 'pending';
-export type NotificationProvider = 'discord' | 'slack' | 'telegram' | 'ntfy' | 'pushover' | 'webhook';
+export type NotificationProvider =
+  | 'smtp'
+  | 'email'
+  | 'discord'
+  | 'slack'
+  | 'telegram'
+  | 'ntfy'
+  | 'pushover'
+  | 'webhook';
 export type ThemePreference = 'auto' | 'light' | 'dark';
 
 export interface Heartbeat {

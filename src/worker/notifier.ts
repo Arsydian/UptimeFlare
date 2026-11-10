@@ -26,6 +26,202 @@ function formatDuration(seconds?: number): string {
   return parts.join(' ');
 }
 
+function toBase64Utf8(input: string): string {
+  const bytes = new TextEncoder().encode(input);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function extractEmailAddress(raw: string): string {
+  const match = raw.match(/<([^>]+)>/);
+  return (match ? match[1] : raw).trim();
+}
+
+async function sendSmtpEmail(options: {
+  host: string;
+  port: number;
+  security: 'tls' | 'starttls' | 'none';
+  username?: string;
+  password?: string;
+  from: string;
+  to: string[];
+  subject: string;
+  bodyText: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  if (options.port === 25) {
+    return {
+      ok: false,
+      error:
+        'Cloudflare Workers blocks outbound TCP port 25. Use port 465 (SSL/TLS) or port 587 / 2525 (STARTTLS).',
+    };
+  }
+
+  const { connect } = await import('cloudflare:sockets');
+  const secureTransport: 'on' | 'off' | 'starttls' =
+    options.security === 'tls'
+      ? 'on'
+      : options.security === 'starttls'
+        ? 'starttls'
+        : 'off';
+
+  let socket = connect(
+    { hostname: options.host, port: options.port },
+    { secureTransport, allowHalfOpen: false }
+  );
+
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  let reader = socket.readable.getReader();
+  let writer = socket.writable.getWriter();
+  let buffer = '';
+
+  const readSmtpResponse = async (): Promise<{ code: number; text: string }> => {
+    const lines: string[] = [];
+    while (true) {
+      const newlineIdx = buffer.indexOf('\n');
+      if (newlineIdx !== -1) {
+        const line = buffer.slice(0, newlineIdx).replace(/\r$/, '');
+        buffer = buffer.slice(newlineIdx + 1);
+        lines.push(line);
+        if (line.length >= 3 && (line.length === 3 || line[3] === ' ')) {
+          const code = Number(line.slice(0, 3));
+          return { code, text: lines.join('\n') };
+        }
+        continue;
+      }
+
+      const { value, done } = await reader.read();
+      if (done) {
+        const last = lines[lines.length - 1] || buffer;
+        return {
+          code: Number(last.slice(0, 3)) || 0,
+          text: [...lines, buffer].filter(Boolean).join('\n'),
+        };
+      }
+      buffer += decoder.decode(value, { stream: true });
+    }
+  };
+
+  const sendCommand = async (cmd: string): Promise<{ code: number; text: string }> => {
+    await writer.write(encoder.encode(`${cmd}\r\n`));
+    return readSmtpResponse();
+  };
+
+  try {
+    await socket.opened;
+    const greeting = await readSmtpResponse();
+    if (greeting.code !== 220) {
+      return { ok: false, error: `SMTP greeting failed: ${greeting.text}` };
+    }
+
+    let ehlo = await sendCommand('EHLO uptimeflare.worker');
+    if (ehlo.code !== 250) {
+      ehlo = await sendCommand('HELO uptimeflare.worker');
+      if (ehlo.code !== 250) {
+        return { ok: false, error: `SMTP EHLO failed: ${ehlo.text}` };
+      }
+    }
+
+    if (options.security === 'starttls') {
+      const startTlsRes = await sendCommand('STARTTLS');
+      if (startTlsRes.code !== 220) {
+        return { ok: false, error: `SMTP STARTTLS failed: ${startTlsRes.text}` };
+      }
+      reader.releaseLock();
+      writer.releaseLock();
+      socket = socket.startTls();
+      reader = socket.readable.getReader();
+      writer = socket.writable.getWriter();
+      buffer = '';
+
+      const tlsEhlo = await sendCommand('EHLO uptimeflare.worker');
+      if (tlsEhlo.code !== 250) {
+        return { ok: false, error: `SMTP EHLO after STARTTLS failed: ${tlsEhlo.text}` };
+      }
+    }
+
+    if (options.username && options.password) {
+      const plainToken = toBase64Utf8(`\0${options.username}\0${options.password}`);
+      const authPlain = await sendCommand(`AUTH PLAIN ${plainToken}`);
+      if (authPlain.code !== 235) {
+        // Fallback to AUTH LOGIN
+        const authLogin = await sendCommand('AUTH LOGIN');
+        if (authLogin.code === 334) {
+          const userRes = await sendCommand(toBase64Utf8(options.username));
+          if (userRes.code === 334) {
+            const passRes = await sendCommand(toBase64Utf8(options.password));
+            if (passRes.code !== 235) {
+              return { ok: false, error: `SMTP AUTH LOGIN failed: ${passRes.text}` };
+            }
+          } else {
+            return { ok: false, error: `SMTP AUTH username rejected: ${userRes.text}` };
+          }
+        } else {
+          return { ok: false, error: `SMTP authentication failed: ${authPlain.text}` };
+        }
+      }
+    }
+
+    const fromAddr = extractEmailAddress(options.from);
+    const mailFrom = await sendCommand(`MAIL FROM:<${fromAddr}>`);
+    if (mailFrom.code !== 250) {
+      return { ok: false, error: `SMTP MAIL FROM rejected: ${mailFrom.text}` };
+    }
+
+    for (const rcpt of options.to) {
+      const rcptAddr = extractEmailAddress(rcpt);
+      const rcptTo = await sendCommand(`RCPT TO:<${rcptAddr}>`);
+      if (rcptTo.code !== 250 && rcptTo.code !== 251) {
+        return { ok: false, error: `SMTP RCPT TO <${rcptAddr}> rejected: ${rcptTo.text}` };
+      }
+    }
+
+    const dataCmd = await sendCommand('DATA');
+    if (dataCmd.code !== 354) {
+      return { ok: false, error: `SMTP DATA rejected: ${dataCmd.text}` };
+    }
+
+    const msgId = `<${Date.now()}.${Math.random().toString(36).slice(2)}@uptimeflare.worker>`;
+    const safeSubject = options.subject.replace(/[\r\n]+/g, ' ');
+    const dotStuffedBody = options.bodyText
+      .replace(/\r?\n/g, '\r\n')
+      .replace(/^\./gm, '..');
+
+    const rawEmail = [
+      `From: ${options.from}`,
+      `To: ${options.to.join(', ')}`,
+      `Subject: =?UTF-8?B?${toBase64Utf8(safeSubject)}?=`,
+      `Date: ${new Date().toUTCString()}`,
+      `Message-ID: ${msgId}`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset=utf-8',
+      'Content-Transfer-Encoding: 8bit',
+      '',
+      dotStuffedBody,
+      '.',
+    ].join('\r\n');
+
+    const dataDone = await sendCommand(rawEmail);
+    if (dataDone.code !== 250) {
+      return { ok: false, error: `SMTP message delivery failed: ${dataDone.text}` };
+    }
+
+    await sendCommand('QUIT').catch(() => null);
+    return { ok: true };
+  } finally {
+    try {
+      reader.releaseLock();
+      writer.releaseLock();
+      await socket.close();
+    } catch {
+      // Ignore socket close errors
+    }
+  }
+}
+
 export async function dispatchChannelAlert(
   channel: NotificationChannelRow,
   alert: AlertEvent
@@ -58,6 +254,93 @@ export async function dispatchChannelAlert(
 
   try {
     switch (channel.provider) {
+      case 'smtp': {
+        const host = (config.smtp_host || '').trim();
+        const port = Number(config.smtp_port) || 587;
+        const security = (config.smtp_security || (port === 465 ? 'tls' : 'starttls')) as
+          | 'tls'
+          | 'starttls'
+          | 'none';
+        const username = (config.smtp_user || '').trim();
+        const password = config.smtp_pass || '';
+        const from = (config.from_email || username || '').trim();
+        const toList = (config.to_email || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        if (!host || !from || toList.length === 0) {
+          return {
+            ok: false,
+            error: 'Missing SMTP host, From email, or To email address',
+          };
+        }
+
+        return await sendSmtpEmail({
+          host,
+          port,
+          security,
+          username: username || undefined,
+          password: password || undefined,
+          from,
+          to: toList,
+          subject: `[UptimeFlare] ${title}`,
+          bodyText: plainText,
+        });
+      }
+
+      case 'email': {
+        const service = (config.email_service || 'resend').toLowerCase();
+        const apiKey = (config.api_key || '').trim();
+        const fromEmail = (config.from_email || '').trim();
+        const toList = (config.to_email || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        if (!apiKey || !fromEmail || toList.length === 0) {
+          return {
+            ok: false,
+            error: 'Missing Email API key, From email, or To email address',
+          };
+        }
+
+        if (service === 'sendgrid') {
+          const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              personalizations: [{ to: toList.map((email) => ({ email })) }],
+              from: { email: extractEmailAddress(fromEmail) },
+              subject: `[UptimeFlare] ${title}`,
+              content: [{ type: 'text/plain', value: plainText }],
+            }),
+          });
+          if (!res.ok) return { ok: false, error: `SendGrid HTTP ${res.status}` };
+          return { ok: true };
+        }
+
+        // Default: Resend HTTP API (https://api.resend.com/emails)
+        const res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: fromEmail,
+            to: toList,
+            subject: `[UptimeFlare] ${title}`,
+            text: plainText,
+          }),
+        });
+        if (!res.ok) return { ok: false, error: `Resend API HTTP ${res.status}` };
+        return { ok: true };
+      }
+
       case 'discord': {
         const webhookUrl = (config.webhook_url || '').trim();
         if (!webhookUrl) return { ok: false, error: 'Missing Discord webhook_url' };
@@ -82,7 +365,7 @@ export async function dispatchChannelAlert(
                     : []),
                 ],
                 timestamp: timeIso,
-                footer: { text: 'UptimeFlare • Cloudflare Workers Edge Monitor' },
+                footer: { text: 'UptimeFlare' },
               },
             ],
           }),

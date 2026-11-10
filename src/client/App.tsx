@@ -21,7 +21,7 @@ import {
 const DEFAULT_SETTINGS: SiteSettings = {
   site_title: 'UptimeFlare',
   site_description: 'Cloudflare Edge Infrastructure & Service Status',
-  public_status_enabled: 'true',
+  public_status_enabled: 'false',
   public_announcement: '',
   public_announcement_type: 'info',
   retention_days: '30',
@@ -180,9 +180,11 @@ export const App: React.FC = () => {
           <ShieldAlert size={36} style={{ color: 'var(--cf-orange)' }} />
           <h1 style={{ fontSize: 19, fontWeight: 700 }}>Cloudflare Zero Trust Required</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 13.5 }}>{authError}</p>
-          <a href="/status" className="btn btn-primary">
-            View Public Status Page (/status)
-          </a>
+          {settings.public_status_enabled === 'true' && (
+            <a href="/status" className="btn btn-primary">
+              View Public Status Page (/status)
+            </a>
+          )}
         </div>
       </div>
     );

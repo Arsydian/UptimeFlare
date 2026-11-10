@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS settings (
 INSERT OR IGNORE INTO settings (key, value) VALUES
   ('site_title', 'UptimeFlare'),
   ('site_description', 'Cloudflare Edge Infrastructure & Service Status'),
-  ('public_status_enabled', 'true'),
+  ('public_status_enabled', 'false'),
   ('public_announcement', ''),
   ('public_announcement_type', 'info'),
   ('retention_days', '30'),

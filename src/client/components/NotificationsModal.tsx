@@ -15,7 +15,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   onRefresh,
 }) => {
   const [name, setName] = useState('');
-  const [provider, setProvider] = useState<NotificationProvider>('discord');
+  const [provider, setProvider] = useState<NotificationProvider>('smtp');
   const [webhookUrl, setWebhookUrl] = useState('');
   const [botToken, setBotToken] = useState('');
   const [chatId, setChatId] = useState('');
@@ -25,13 +25,41 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   const [pushoverUser, setPushoverUser] = useState('');
   const [secretHeader, setSecretHeader] = useState('');
   const [secretValue, setSecretValue] = useState('');
-  const [isDefault, setIsDefault] = useState(true);
 
+  // SMTP & Email API fields
+  const [smtpHost, setSmtpHost] = useState('');
+  const [smtpPort, setSmtpPort] = useState('587');
+  const [smtpSecurity, setSmtpSecurity] = useState<'starttls' | 'tls'>('starttls');
+  const [smtpUser, setSmtpUser] = useState('');
+  const [smtpPass, setSmtpPass] = useState('');
+  const [emailService, setEmailService] = useState<'resend' | 'sendgrid'>('resend');
+  const [emailApiKey, setEmailApiKey] = useState('');
+  const [fromEmail, setFromEmail] = useState('');
+  const [toEmail, setToEmail] = useState('');
+
+  const [isDefault, setIsDefault] = useState(true);
   const [statusMsg, setStatusMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const buildConfig = (): Record<string, string> => {
     switch (provider) {
+      case 'smtp':
+        return {
+          smtp_host: smtpHost.trim(),
+          smtp_port: smtpPort.trim() || '587',
+          smtp_security: smtpSecurity,
+          smtp_user: smtpUser.trim(),
+          smtp_pass: smtpPass,
+          from_email: fromEmail.trim(),
+          to_email: toEmail.trim(),
+        };
+      case 'email':
+        return {
+          email_service: emailService,
+          api_key: emailApiKey.trim(),
+          from_email: fromEmail.trim(),
+          to_email: toEmail.trim(),
+        };
       case 'discord':
       case 'slack':
         return { webhook_url: webhookUrl.trim() };
@@ -90,6 +118,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
       setName('');
       setWebhookUrl('');
       setNtfyTopic('');
+      setSmtpPass('');
+      setEmailApiKey('');
       await onRefresh();
       setStatusMsg({ type: 'ok', text: 'Notification channel added.' });
     } catch (err) {
@@ -208,6 +238,8 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                   value={provider}
                   onChange={(e) => setProvider(e.target.value as NotificationProvider)}
                 >
+                  <option value="smtp">Email (Direct SMTP / STARTTLS / SSL)</option>
+                  <option value="email">Email API (Resend / SendGrid)</option>
                   <option value="discord">Discord Webhook</option>
                   <option value="slack">Slack Incoming Webhook</option>
                   <option value="telegram">Telegram Bot</option>
@@ -222,11 +254,151 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="e.g. Ops Discord #alerts"
+                  placeholder="e.g. Ops Email Alerts"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
               </div>
+
+              {provider === 'smtp' && (
+                <>
+                  <div className="form-field">
+                    <label className="form-label">SMTP Hostname</label>
+                    <input
+                      type="text"
+                      className="form-input mono"
+                      placeholder="smtp.gmail.com / smtp.fastmail.com"
+                      value={smtpHost}
+                      onChange={(e) => setSmtpHost(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">SMTP Port & Security</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        type="number"
+                        className="form-input mono"
+                        style={{ width: 100 }}
+                        value={smtpPort}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSmtpPort(val);
+                          if (val === '465') setSmtpSecurity('tls');
+                          else if (val === '587' || val === '2525') setSmtpSecurity('starttls');
+                        }}
+                        required
+                      />
+                      <select
+                        className="form-select"
+                        value={smtpSecurity}
+                        onChange={(e) => setSmtpSecurity(e.target.value as 'starttls' | 'tls')}
+                      >
+                        <option value="starttls">STARTTLS (Port 587 / 2525)</option>
+                        <option value="tls">Implicit SSL/TLS (Port 465)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">SMTP Username</label>
+                    <input
+                      type="text"
+                      className="form-input mono"
+                      placeholder="alerts@example.com"
+                      value={smtpUser}
+                      onChange={(e) => setSmtpUser(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">SMTP Password / App Password</label>
+                    <input
+                      type="password"
+                      className="form-input mono"
+                      placeholder="••••••••••••"
+                      value={smtpPass}
+                      onChange={(e) => setSmtpPass(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">From Email</label>
+                    <input
+                      type="text"
+                      className="form-input mono"
+                      placeholder="UptimeFlare <alerts@example.com>"
+                      value={fromEmail}
+                      onChange={(e) => setFromEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">To Email (Comma-separated)</label>
+                    <input
+                      type="text"
+                      className="form-input mono"
+                      placeholder="admin@example.com, ops@example.com"
+                      value={toEmail}
+                      onChange={(e) => setToEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="form-field full">
+                    <span className="form-hint">
+                      Uses Cloudflare Workers TCP sockets (<code>cloudflare:sockets</code>). Port 25
+                      is blocked by Cloudflare; use port <strong>587</strong> / <strong>2525</strong>{' '}
+                      (STARTTLS) or <strong>465</strong> (SSL/TLS).
+                    </span>
+                  </div>
+                </>
+              )}
+
+              {provider === 'email' && (
+                <>
+                  <div className="form-field">
+                    <label className="form-label">Email API Service</label>
+                    <select
+                      className="form-select"
+                      value={emailService}
+                      onChange={(e) => setEmailService(e.target.value as 'resend' | 'sendgrid')}
+                    >
+                      <option value="resend">Resend (api.resend.com)</option>
+                      <option value="sendgrid">SendGrid (api.sendgrid.com)</option>
+                    </select>
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">API Key</label>
+                    <input
+                      type="password"
+                      className="form-input mono"
+                      placeholder="re_123456... or SG.123456..."
+                      value={emailApiKey}
+                      onChange={(e) => setEmailApiKey(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">From Email</label>
+                    <input
+                      type="text"
+                      className="form-input mono"
+                      placeholder="UptimeFlare <alerts@example.com>"
+                      value={fromEmail}
+                      onChange={(e) => setFromEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label className="form-label">To Email (Comma-separated)</label>
+                    <input
+                      type="text"
+                      className="form-input mono"
+                      placeholder="admin@example.com"
+                      value={toEmail}
+                      onChange={(e) => setToEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                </>
+              )}
 
               {(provider === 'discord' || provider === 'slack' || provider === 'webhook') && (
                 <div className="form-field full">
