@@ -52,7 +52,7 @@ UptimeFlare is architected around the official [Cloudflare Workers Limits](https
 You can deploy and configure UptimeFlare **entirely from your browser** without installing Node.js, building locally, or running terminal commands.
 
 ### How Zero-Terminal Provisioning Works
-- **Automatic D1 Provisioning**: [`wrangler.toml`](file:///home/antigravity/Arsydian/UptimeFlare/wrangler.toml) declares `binding = "DB"` and `database_name = "uptimeflare-db"` without a hardcoded `database_id`. Under [Wrangler v4 Automatic Resource Provisioning](https://developers.cloudflare.com/workers/wrangler/configuration/#automatic-resource-provisioning), `npx wrangler deploy` automatically creates and binds the `uptimeflare-db` D1 database on your Cloudflare account (or inherits an existing `DB` binding configured in the Cloudflare Dashboard).
+- **Automatic D1 Provisioning**: [`wrangler.toml`](file:///home/antigravity/Arsydian/UptimeFlare/wrangler.toml) declares `binding = "uf_db"` and `database_name = "uf_db"` without a hardcoded `database_id`. Under [Wrangler v4 Automatic Resource Provisioning](https://developers.cloudflare.com/workers/wrangler/configuration/#automatic-resource-provisioning), `npx wrangler deploy` automatically creates and binds the `uf_db` D1 database on your Cloudflare account (or inherits an existing `uf_db` binding configured in the Cloudflare Dashboard).
 - **Automatic Schema Bootstrapping**: On its first request or scheduled cron run, [`ensureSchema()`](file:///home/antigravity/Arsydian/UptimeFlare/src/worker/index.ts#L21-L126) in the Worker automatically creates all 5 SQLite tables (`monitors`, `heartbeats`, `incidents`, `notification_channels`, `settings`) and default settings in D1—no manual `wrangler d1 migrations apply` command is required.
 - **Preserved Dashboard Variables**: `keep_vars = true` in [`wrangler.toml`](file:///home/antigravity/Arsydian/UptimeFlare/wrangler.toml) ensures any environment variables you set in the Cloudflare Dashboard are never overwritten on subsequent Git pushes.
 
@@ -64,8 +64,8 @@ You can deploy and configure UptimeFlare **entirely from your browser** without 
    - **Build command**: `npm run build`
    - **Deploy command**: `npx wrangler deploy`
 4. Click **Save and Deploy**.
-   - Cloudflare Workers Builds will install dependencies, compile the React SPA into `dist/client`, auto-provision the `uptimeflare-db` D1 database, register the `* * * * *` 1-minute Cron Trigger, and deploy your Worker.
-   - *(Note: If your Cloudflare Builds token is restricted from auto-creating D1 databases, UptimeFlare will display a 1-step guide on first load—simply go to **Workers & Pages > uptimeflare > Settings > Bindings > Add binding > D1 database**, set Variable name to `DB`, and select/create `uptimeflare-db`.)*
+   - Cloudflare Workers Builds will install dependencies, compile the React SPA into `dist/client`, auto-provision the `uf_db` D1 database, register the `* * * * *` 1-minute Cron Trigger, and deploy your Worker.
+   - *(Note: If your Cloudflare Builds token is restricted from auto-creating D1 databases, UptimeFlare will display a 1-step guide on first load—simply go to **Workers & Pages > uptimeflare > Settings > Bindings > Add binding > D1 database**, set Variable name to `uf_db`, and select/create `uf_db`.)*
 
 ### Step 2: Secure with Cloudflare Zero Trust (Cloudflare Access)
 To protect your UptimeFlare dashboard behind **Cloudflare Access** ([official documentation](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/)):

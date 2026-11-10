@@ -3,7 +3,7 @@ export type MonitorStatus = 'up' | 'down' | 'degraded' | 'paused' | 'pending';
 export type NotificationProvider = 'discord' | 'slack' | 'telegram' | 'ntfy' | 'pushover' | 'webhook';
 
 export interface Env {
-  DB: D1Database;
+  uf_db: D1Database;
   ASSETS?: Fetcher;
   CF_ACCESS_TEAM_DOMAIN?: string;
   CF_ACCESS_AUD?: string;

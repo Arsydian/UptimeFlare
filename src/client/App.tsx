@@ -66,7 +66,7 @@ export const App: React.FC = () => {
       setDbBindingError(null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load dashboard';
-      if (msg.includes('DB_BINDING_MISSING') || msg.includes("D1 database binding 'DB'")) {
+      if (msg.includes('uf_db_BINDING_MISSING') || msg.includes("D1 database binding 'uf_db'")) {
         setDbBindingError(msg);
       } else if (msg.toLowerCase().includes('unauthorized') || msg.includes('401')) {
         setAuthError(msg);
@@ -122,7 +122,7 @@ export const App: React.FC = () => {
           </div>
           <p style={{ color: 'var(--text-secondary)', fontSize: 13.5, lineHeight: 1.55 }}>
             Your UptimeFlare Worker is live, but needs a Cloudflare D1 database bound to{' '}
-            <code className="mono">DB</code>.
+            <code className="mono">uf_db</code>.
           </p>
           <ol
             style={{
@@ -141,8 +141,8 @@ export const App: React.FC = () => {
               Open <strong>Settings &gt; Bindings &gt; Add binding &gt; D1 database</strong>.
             </li>
             <li>
-              Set <strong>Variable name</strong> to <code className="mono">DB</code>, select or
-              create <code className="mono">uptimeflare-db</code>, and click{' '}
+              Set <strong>Variable name</strong> to <code className="mono">uf_db</code>, select or
+              create <code className="mono">uf_db</code>, and click{' '}
               <strong>Deploy</strong>.
             </li>
           </ol>

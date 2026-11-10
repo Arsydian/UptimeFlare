@@ -18,8 +18,8 @@ crons = ["* * * * *"]
 
 # Cloudflare D1 Database Binding (Free Plan: 5 GB storage, 5M rows read/day, 100k rows written/day)
 # Omitting database_id allows Wrangler v4 / Workers Builds to automatically provision the database on first deploy,
-# or you can bind any D1 database named `DB` in the Cloudflare Dashboard (Settings -> Bindings).
+# or you can bind a D1 database named `uf_db` in the Cloudflare Dashboard (Settings -> Bindings).
 [[d1_databases]]
-binding = "DB"
-database_name = "uptimeflare-db"
+binding = "uf_db"
+database_name = "uf_db"
 migrations_dir = "migrations"

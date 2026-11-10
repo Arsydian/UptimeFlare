@@ -285,19 +285,19 @@ app.get('/api/health', (c) => {
 });
 
 app.get('/api/public/status', async (c) => {
-  await ensureSchema(c.env.DB);
-  const settings = await getSettingsMap(c.env.DB);
+  await ensureSchema(c.env.uf_db);
+  const settings = await getSettingsMap(c.env.uf_db);
   if (settings.public_status_enabled === 'false') {
     return c.json({ error: 'Public status page is disabled by administrator.' }, 403);
   }
 
-  const { results: publicMonitors } = await c.env.DB.prepare(
+  const { results: publicMonitors } = await c.env.uf_db.prepare(
     'SELECT * FROM monitors WHERE is_public = 1 ORDER BY group_name ASC, name ASC'
   ).all<MonitorRow>();
 
-  const enriched = await enrichMonitorsWithTelemetry(c.env.DB, publicMonitors || [], true);
+  const enriched = await enrichMonitorsWithTelemetry(c.env.uf_db, publicMonitors || [], true);
 
-  const { results: publicIncidents } = await c.env.DB.prepare(
+  const { results: publicIncidents } = await c.env.uf_db.prepare(
     `SELECT i.*, m.name as monitor_name
      FROM incidents i
      JOIN monitors m ON m.id = i.monitor_id
@@ -320,13 +320,13 @@ app.get('/api/public/status', async (c) => {
 });
 
 app.all('/api/push/:token', async (c) => {
-  await ensureSchema(c.env.DB);
+  await ensureSchema(c.env.uf_db);
   const token = c.req.param('token').trim();
   if (!token) {
     return c.json({ ok: false, error: 'Missing push token' }, 400);
   }
 
-  const monitor = await c.env.DB.prepare('SELECT * FROM monitors WHERE push_token = ? LIMIT 1')
+  const monitor = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE push_token = ? LIMIT 1')
     .bind(token)
     .first<MonitorRow>();
 
@@ -343,7 +343,7 @@ app.all('/api/push/:token', async (c) => {
   const pingParam = Number(c.req.query('ping') || '1');
   const latencyMs = Number.isNaN(pingParam) || pingParam < 0 ? 1 : Math.round(pingParam);
 
-  const outcome = await processSingleMonitorCheck(c.env.DB, monitor, {
+  const outcome = await processSingleMonitorCheck(c.env.uf_db, monitor, {
     status: statusParam === 'down' ? 'down' : 'up',
     latency_ms: latencyMs,
     status_code: statusParam === 'down' ? 500 : 200,
@@ -366,12 +366,12 @@ app.use('/api/*', async (c, next) => {
   if (path === '/api/health') {
     return next();
   }
-  if (!c.env.DB) {
+  if (!c.env.uf_db) {
     return c.json(
       {
         error:
-          "D1 database binding 'DB' is not configured. In the Cloudflare Dashboard, open Workers & Pages -> uptimeflare -> Settings -> Bindings and add a D1 database binding with Variable name 'DB'.",
-        code: 'DB_BINDING_MISSING',
+          "D1 database binding 'uf_db' is not configured. In the Cloudflare Dashboard, open Workers & Pages -> uptimeflare -> Settings -> Bindings and add a D1 database binding with Variable name 'uf_db'.",
+        code: 'uf_db_BINDING_MISSING',
       },
       503
     );
@@ -379,7 +379,7 @@ app.use('/api/*', async (c, next) => {
   if (path === '/api/public/status' || path.startsWith('/api/push/')) {
     return next();
   }
-  await ensureSchema(c.env.DB);
+  await ensureSchema(c.env.uf_db);
   return requireZeroTrustAuth(c, next);
 });
 
@@ -390,21 +390,21 @@ app.get('/api/auth/me', async (c) => {
 
 app.get('/api/dashboard', async (c) => {
   const [monitorsRes, incidentsRes, settings, channelsRes, identity] = await Promise.all([
-    c.env.DB.prepare('SELECT * FROM monitors ORDER BY group_name ASC, name ASC').all<MonitorRow>(),
-    c.env.DB.prepare(
+    c.env.uf_db.prepare('SELECT * FROM monitors ORDER BY group_name ASC, name ASC').all<MonitorRow>(),
+    c.env.uf_db.prepare(
       `SELECT i.*, m.name as monitor_name
        FROM incidents i
        JOIN monitors m ON m.id = i.monitor_id
        ORDER BY i.started_at DESC
        LIMIT 50`
     ).all<IncidentRow>(),
-    getSettingsMap(c.env.DB),
-    c.env.DB.prepare('SELECT * FROM notification_channels ORDER BY id ASC').all<NotificationChannelRow>(),
+    getSettingsMap(c.env.uf_db),
+    c.env.uf_db.prepare('SELECT * FROM notification_channels ORDER BY id ASC').all<NotificationChannelRow>(),
     resolveZeroTrustIdentity(c),
   ]);
 
   const enrichedMonitors = await enrichMonitorsWithTelemetry(
-    c.env.DB,
+    c.env.uf_db,
     monitorsRes.results || [],
     false
   );
@@ -440,7 +440,7 @@ app.get('/api/monitors/:id/history', async (c) => {
     range === '7d' ? now - 7 * 24 * 60 * 60 * 1000 : now - 24 * 60 * 60 * 1000;
 
   const [beatsRes, incidentsRes] = await Promise.all([
-    c.env.DB.prepare(
+    c.env.uf_db.prepare(
       `SELECT id, monitor_id, status, latency_ms, status_code, message, timestamp
        FROM heartbeats
        WHERE monitor_id = ? AND timestamp >= ?
@@ -449,7 +449,7 @@ app.get('/api/monitors/:id/history', async (c) => {
     )
       .bind(id, cutoff)
       .all<HeartbeatRow>(),
-    c.env.DB.prepare(
+    c.env.uf_db.prepare(
       `SELECT * FROM incidents WHERE monitor_id = ? ORDER BY started_at DESC LIMIT 30`
     )
       .bind(id)
@@ -543,7 +543,7 @@ app.post('/api/monitors', async (c) => {
     ? JSON.stringify(payload.notification_ids)
     : '[]';
 
-  const insertRes = await c.env.DB.prepare(
+  const insertRes = await c.env.uf_db.prepare(
     `INSERT INTO monitors (
       name, group_name, tags, type, url_or_host, port, method, headers, body,
       timeout_ms, interval_seconds, max_retries, expected_status, follow_redirects,
@@ -588,26 +588,26 @@ app.post('/api/monitors', async (c) => {
     .run();
 
   const newId = Number(insertRes.meta.last_row_id);
-  const createdMonitor = await c.env.DB.prepare('SELECT * FROM monitors WHERE id = ?')
+  const createdMonitor = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE id = ?')
     .bind(newId)
     .first<MonitorRow>();
 
   // Trigger an immediate initial check for active non-push monitors
   if (createdMonitor && createdMonitor.active === 1 && createdMonitor.type !== 'push') {
-    await processSingleMonitorCheck(c.env.DB, createdMonitor);
+    await processSingleMonitorCheck(c.env.uf_db, createdMonitor);
   }
 
-  const updated = await c.env.DB.prepare('SELECT * FROM monitors WHERE id = ?')
+  const updated = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE id = ?')
     .bind(newId)
     .first<MonitorRow>();
 
-  const enriched = updated ? await enrichMonitorsWithTelemetry(c.env.DB, [updated]) : [];
+  const enriched = updated ? await enrichMonitorsWithTelemetry(c.env.uf_db, [updated]) : [];
   return c.json({ monitor: enriched[0] || null }, 201);
 });
 
 app.put('/api/monitors/:id', async (c) => {
   const id = Number(c.req.param('id'));
-  const existing = await c.env.DB.prepare('SELECT * FROM monitors WHERE id = ?')
+  const existing = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE id = ?')
     .bind(id)
     .first<MonitorRow>();
 
@@ -638,7 +638,7 @@ app.put('/api/monitors/:id', async (c) => {
     ? JSON.stringify(payload.notification_ids)
     : existing.notification_ids;
 
-  await c.env.DB.prepare(
+  await c.env.uf_db.prepare(
     `UPDATE monitors SET
       name = ?, group_name = ?, tags = ?, type = ?, url_or_host = ?, port = ?,
       method = ?, headers = ?, body = ?, timeout_ms = ?, interval_seconds = ?,
@@ -690,16 +690,16 @@ app.put('/api/monitors/:id', async (c) => {
     )
     .run();
 
-  const updated = await c.env.DB.prepare('SELECT * FROM monitors WHERE id = ?')
+  const updated = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE id = ?')
     .bind(id)
     .first<MonitorRow>();
-  const enriched = updated ? await enrichMonitorsWithTelemetry(c.env.DB, [updated]) : [];
+  const enriched = updated ? await enrichMonitorsWithTelemetry(c.env.uf_db, [updated]) : [];
   return c.json({ monitor: enriched[0] || null });
 });
 
 app.patch('/api/monitors/:id/toggle', async (c) => {
   const id = Number(c.req.param('id'));
-  const existing = await c.env.DB.prepare('SELECT * FROM monitors WHERE id = ?')
+  const existing = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE id = ?')
     .bind(id)
     .first<MonitorRow>();
 
@@ -711,30 +711,30 @@ app.patch('/api/monitors/:id/toggle', async (c) => {
   const nextStatus = nextActive === 0 ? 'paused' : 'pending';
   const now = Date.now();
 
-  await c.env.DB.prepare(
+  await c.env.uf_db.prepare(
     'UPDATE monitors SET active = ?, current_status = ?, updated_at = ? WHERE id = ?'
   )
     .bind(nextActive, nextStatus, now, id)
     .run();
 
-  const refreshed = await c.env.DB.prepare('SELECT * FROM monitors WHERE id = ?')
+  const refreshed = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE id = ?')
     .bind(id)
     .first<MonitorRow>();
 
   if (refreshed && nextActive === 1 && refreshed.type !== 'push') {
-    await processSingleMonitorCheck(c.env.DB, refreshed);
+    await processSingleMonitorCheck(c.env.uf_db, refreshed);
   }
 
-  const finalRow = await c.env.DB.prepare('SELECT * FROM monitors WHERE id = ?')
+  const finalRow = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE id = ?')
     .bind(id)
     .first<MonitorRow>();
-  const enriched = finalRow ? await enrichMonitorsWithTelemetry(c.env.DB, [finalRow]) : [];
+  const enriched = finalRow ? await enrichMonitorsWithTelemetry(c.env.uf_db, [finalRow]) : [];
   return c.json({ monitor: enriched[0] || null });
 });
 
 app.post('/api/monitors/:id/check', async (c) => {
   const id = Number(c.req.param('id'));
-  const monitor = await c.env.DB.prepare('SELECT * FROM monitors WHERE id = ?')
+  const monitor = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE id = ?')
     .bind(id)
     .first<MonitorRow>();
 
@@ -742,11 +742,11 @@ app.post('/api/monitors/:id/check', async (c) => {
     return c.json({ error: 'Monitor not found' }, 404);
   }
 
-  const outcome = await processSingleMonitorCheck(c.env.DB, monitor);
-  const updated = await c.env.DB.prepare('SELECT * FROM monitors WHERE id = ?')
+  const outcome = await processSingleMonitorCheck(c.env.uf_db, monitor);
+  const updated = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE id = ?')
     .bind(id)
     .first<MonitorRow>();
-  const enriched = updated ? await enrichMonitorsWithTelemetry(c.env.DB, [updated]) : [];
+  const enriched = updated ? await enrichMonitorsWithTelemetry(c.env.uf_db, [updated]) : [];
 
   return c.json({
     outcome,
@@ -756,10 +756,10 @@ app.post('/api/monitors/:id/check', async (c) => {
 
 app.delete('/api/monitors/:id', async (c) => {
   const id = Number(c.req.param('id'));
-  await c.env.DB.batch([
-    c.env.DB.prepare('DELETE FROM heartbeats WHERE monitor_id = ?').bind(id),
-    c.env.DB.prepare('DELETE FROM incidents WHERE monitor_id = ?').bind(id),
-    c.env.DB.prepare('DELETE FROM monitors WHERE id = ?').bind(id),
+  await c.env.uf_db.batch([
+    c.env.uf_db.prepare('DELETE FROM heartbeats WHERE monitor_id = ?').bind(id),
+    c.env.uf_db.prepare('DELETE FROM incidents WHERE monitor_id = ?').bind(id),
+    c.env.uf_db.prepare('DELETE FROM monitors WHERE id = ?').bind(id),
   ]);
   return c.json({ deleted: true, id });
 });
@@ -781,7 +781,7 @@ app.post('/api/notifications', async (c) => {
     return c.json({ error: 'Channel name and provider are required' }, 400);
   }
 
-  const res = await c.env.DB.prepare(
+  const res = await c.env.uf_db.prepare(
     `INSERT INTO notification_channels (name, provider, config, is_default, active, created_at)
      VALUES (?, ?, ?, ?, ?, ?)`
   )
@@ -808,7 +808,7 @@ app.put('/api/notifications/:id', async (c) => {
     active?: boolean;
   }>();
 
-  await c.env.DB.prepare(
+  await c.env.uf_db.prepare(
     `UPDATE notification_channels
      SET name = ?, provider = ?, config = ?, is_default = ?, active = ?
      WHERE id = ?`
@@ -828,7 +828,7 @@ app.put('/api/notifications/:id', async (c) => {
 
 app.delete('/api/notifications/:id', async (c) => {
   const id = Number(c.req.param('id'));
-  await c.env.DB.prepare('DELETE FROM notification_channels WHERE id = ?').bind(id).run();
+  await c.env.uf_db.prepare('DELETE FROM notification_channels WHERE id = ?').bind(id).run();
   return c.json({ deleted: true });
 });
 
@@ -894,7 +894,7 @@ app.put('/api/settings', async (c) => {
   for (const key of allowedKeys) {
     if (body[key] !== undefined) {
       statements.push(
-        c.env.DB.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(
+        c.env.uf_db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(
           key,
           String(body[key])
         )
@@ -902,18 +902,18 @@ app.put('/api/settings', async (c) => {
     }
   }
   if (statements.length > 0) {
-    await c.env.DB.batch(statements);
+    await c.env.uf_db.batch(statements);
   }
 
-  const updated = await getSettingsMap(c.env.DB);
+  const updated = await getSettingsMap(c.env.uf_db);
   return c.json({ settings: updated });
 });
 
 app.get('/api/backup/export', async (c) => {
   const [monitors, channels, settings] = await Promise.all([
-    c.env.DB.prepare('SELECT * FROM monitors ORDER BY id ASC').all<MonitorRow>(),
-    c.env.DB.prepare('SELECT * FROM notification_channels ORDER BY id ASC').all<NotificationChannelRow>(),
-    getSettingsMap(c.env.DB),
+    c.env.uf_db.prepare('SELECT * FROM monitors ORDER BY id ASC').all<MonitorRow>(),
+    c.env.uf_db.prepare('SELECT * FROM notification_channels ORDER BY id ASC').all<NotificationChannelRow>(),
+    getSettingsMap(c.env.uf_db),
   ]);
 
   return c.json({
@@ -938,18 +938,18 @@ app.post('/api/backup/import', async (c) => {
 
   if (payload.settings) {
     const stmts = Object.entries(payload.settings).map(([k, v]) =>
-      c.env.DB.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(
+      c.env.uf_db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(
         k,
         String(v)
       )
     );
-    if (stmts.length > 0) await c.env.DB.batch(stmts);
+    if (stmts.length > 0) await c.env.uf_db.batch(stmts);
   }
 
   if (Array.isArray(payload.notification_channels)) {
     for (const ch of payload.notification_channels) {
       if (!ch.name || !ch.provider) continue;
-      await c.env.DB.prepare(
+      await c.env.uf_db.prepare(
         `INSERT INTO notification_channels (name, provider, config, is_default, active, created_at)
          VALUES (?, ?, ?, ?, ?, ?)`
       )
@@ -970,7 +970,7 @@ app.post('/api/backup/import', async (c) => {
     for (const m of payload.monitors) {
       if (!m.name || !m.url_or_host) continue;
       const type = m.type || 'http';
-      await c.env.DB.prepare(
+      await c.env.uf_db.prepare(
         `INSERT INTO monitors (
           name, group_name, tags, type, url_or_host, port, method, headers, body,
           timeout_ms, interval_seconds, max_retries, expected_status, follow_redirects,
@@ -1024,7 +1024,7 @@ app.post('/api/backup/import', async (c) => {
 });
 
 app.post('/api/cron/run', async (c) => {
-  const summary = await runScheduledChecks(c.env.DB);
+  const summary = await runScheduledChecks(c.env.uf_db);
   return c.json(summary);
 });
 
@@ -1039,11 +1039,11 @@ app.all('*', async (c) => {
 export default {
   fetch: app.fetch,
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
-    if (!env.DB) return;
+    if (!env.uf_db) return;
     ctx.waitUntil(
       (async () => {
-        await ensureSchema(env.DB);
-        await runScheduledChecks(env.DB);
+        await ensureSchema(env.uf_db);
+        await runScheduledChecks(env.uf_db);
       })()
     );
   },

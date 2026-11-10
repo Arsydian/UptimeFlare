@@ -153,9 +153,9 @@ export async function resolveZeroTrustIdentity(c: Context<{ Bindings: Env }>): P
   const devBypass = (c.env.DEV_BYPASS_AUTH || '').toLowerCase() === 'true';
 
   // Fall back to in-app D1 settings if Worker environment variables are not set
-  if ((!teamDomain || !aud) && c.env.DB) {
+  if ((!teamDomain || !aud) && c.env.uf_db) {
     try {
-      const { results } = await c.env.DB.prepare(
+      const { results } = await c.env.uf_db.prepare(
         "SELECT key, value FROM settings WHERE key IN ('cf_access_team_domain', 'cf_access_aud')"
       ).all<{ key: string; value: string }>();
       for (const row of results || []) {
