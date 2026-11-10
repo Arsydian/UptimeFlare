@@ -252,7 +252,6 @@ export const App: React.FC = () => {
           monitors={monitors}
           selectedMonitorId={selectedMonitorId}
           onSelectMonitor={setSelectedMonitorId}
-          onOpenAddMonitor={() => setMonitorModalState({ open: true, monitor: null })}
         />
 
         <main className="cf-main">
@@ -275,7 +274,6 @@ export const App: React.FC = () => {
               monitors={monitors}
               incidents={incidents}
               onSelectMonitor={(id) => setSelectedMonitorId(id)}
-              onOpenAddMonitor={() => setMonitorModalState({ open: true, monitor: null })}
               onCheckMonitor={handleCheckMonitor}
               checkingId={checkingId}
             />

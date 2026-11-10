@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { LayoutGrid, Plus, Search } from 'lucide-react';
+import { LayoutGrid, Search } from 'lucide-react';
 import { Monitor } from '../types';
 import { HeartbeatBar } from './HeartbeatBar';
 
@@ -7,14 +7,12 @@ interface SidebarProps {
   monitors: Monitor[];
   selectedMonitorId: number | null;
   onSelectMonitor: (id: number | null) => void;
-  onOpenAddMonitor: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   monitors,
   selectedMonitorId,
   onSelectMonitor,
-  onOpenAddMonitor,
 }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'up' | 'down' | 'paused'>('all');
@@ -108,10 +106,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }}
           >
             <div>No monitors match your filter.</div>
-            <button type="button" className="btn btn-primary btn-sm" onClick={onOpenAddMonitor}>
-              <Plus size={14} />
-              <span>Add First Monitor</span>
-            </button>
           </div>
         ) : (
           grouped.map(([groupName, items]) => (

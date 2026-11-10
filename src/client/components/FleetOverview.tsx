@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   Clock,
   Globe,
-  Plus,
   RefreshCw,
   Server,
   Zap,
@@ -17,7 +16,6 @@ interface FleetOverviewProps {
   monitors: Monitor[];
   incidents: Incident[];
   onSelectMonitor: (id: number) => void;
-  onOpenAddMonitor: () => void;
   onCheckMonitor: (id: number) => void;
   checkingId: number | null;
 }
@@ -26,7 +24,6 @@ export const FleetOverview: React.FC<FleetOverviewProps> = ({
   monitors,
   incidents,
   onSelectMonitor,
-  onOpenAddMonitor,
   onCheckMonitor,
   checkingId,
 }) => {
@@ -52,28 +49,13 @@ export const FleetOverview: React.FC<FleetOverviewProps> = ({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* Top Overview Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 12,
-        }}
-      >
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em' }}>
-            Overview
-          </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-            Real-time synthetic monitoring across HTTP(s), Keyword, JSON, TCP Port, DNS (1.1.1.1 DoH), and Inbound Push agents.
-          </p>
-        </div>
-
-        <button type="button" className="btn btn-primary" onClick={onOpenAddMonitor}>
-          <Plus size={16} />
-          <span>Add New Monitor</span>
-        </button>
+      <div>
+        <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em' }}>
+          Overview
+        </h1>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+          Real-time synthetic monitoring across HTTP(s), Keyword, JSON, TCP Port, DNS (1.1.1.1 DoH), and Inbound Push agents.
+        </p>
       </div>
 
       {/* 4 Cloudflare Analytics KPI Cards */}
@@ -156,13 +138,9 @@ export const FleetOverview: React.FC<FleetOverviewProps> = ({
               Start Monitoring Your Sites & Servers
             </h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: 13.5 }}>
-              Add HTTP/HTTPS endpoints, keyword or JSON API assertions, TCP server ports, DNS records, or inbound Push agents. Everything is stored in Cloudflare D1 within the Free Tier.
+              Use the <strong>&ldquo;+ Add Monitor&rdquo;</strong> button in the top navigation bar to add HTTP/HTTPS endpoints, keyword or JSON API assertions, TCP server ports, DNS records, or inbound Push agents. Everything is stored in Cloudflare D1 within the Free Tier.
             </p>
           </div>
-          <button type="button" className="btn btn-primary" onClick={onOpenAddMonitor}>
-            <Plus size={16} />
-            <span>Create Your First Monitor</span>
-          </button>
         </div>
       ) : (
         <div className="cf-card">
