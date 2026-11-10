@@ -1,29 +1,31 @@
 name = "uptimeflare"
 main = "src/worker/index.ts"
-compatibility_date = "2025-03-01"
+compatibility_date = "2026-11-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Serve the React SPA via Cloudflare Workers Static Assets (Free Tier compatible)
+# Serve the React SPA via Cloudflare Workers Static Assets (Free & unlimited static requests)
+# run_worker_first ensures all /api/* routes always invoke the Worker script first
 [assets]
 directory = "./dist/client"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
 
 # 1-minute Cron Trigger to execute scheduled uptime checks & D1 retention pruning
 [triggers]
 crons = ["* * * * *"]
 
-# Cloudflare D1 Database Binding (Free Tier: 5GB storage, 5M reads/day, 100k writes/day)
+# Cloudflare D1 Database Binding (Free Plan: 5 GB storage, 5M rows read/day, 100k rows written/day)
 [[d1_databases]]
 binding = "DB"
 database_name = "uptimeflare-db"
-database_id = "00000000-0000-0000-0000-000000000000" # Replace with your `wrangler d1 create uptimeflare-db` ID
+database_id = "00000000-0000-0000-0000-000000000000" # Replace with your `npx wrangler d1 create uptimeflare-db` ID
 migrations_dir = "migrations"
 
 [vars]
-# Set your Cloudflare Zero Trust Team Domain (e.g., "myteam.cloudflareaccess.com")
+# Your Cloudflare Zero Trust Team Domain (e.g., "myteam.cloudflareaccess.com")
 CF_ACCESS_TEAM_DOMAIN = ""
-# Set your Cloudflare Zero Trust Application Audience (AUD) tag
+# Your Cloudflare Access Application Audience (AUD) tag
 CF_ACCESS_AUD = ""
 # Set to "true" ONLY in local .dev.vars for local testing without Cloudflare Access headers
 DEV_BYPASS_AUTH = "false"
