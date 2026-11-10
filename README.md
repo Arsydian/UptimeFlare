@@ -93,22 +93,12 @@ To protect your UptimeFlare dashboard behind **Cloudflare Access** ([official do
 ### Step 3: Add Monitors & Alert Channels in the Dashboard
 Open your UptimeFlare URL and use the web UI to:
 - Click **Add Monitor** to add HTTP(s), Keyword, JSON Query, TCP Port, DNS Record, or Inbound Push monitors (and test them live with **Test Monitor Check**).
-- Click **Alert Channels** to configure Discord, Slack, Telegram, Ntfy, Pushover, or Custom Webhook alerts (and verify them with **Send Test Alert**).
-- Click **Settings** to customize your status page title, announcement banner, D1 retention period, or export/import JSON configuration backups.
+- Click **Settings > Alerts** to configure Direct SMTP, Email API (Resend / SendGrid), Discord, Slack, Telegram, Ntfy, Pushover, or Custom Webhook alerts (and verify them with **Send Test Alert**).
+- Click **Settings > General & Backup** to customize your status page title, toggle the Public Status Page (`/status`), set the D1 retention period, or export/import JSON configuration backups.
 
 ---
 
-## Option 2: Automated GitHub Actions Deployment (Optional)
-
-The included workflow at [`.github/workflows/deploy.yml`](file:///home/antigravity/Arsydian/UptimeFlare/.github/workflows/deploy.yml) uses [`cloudflare/wrangler-action@v4`](https://github.com/cloudflare/wrangler-action) to run unit tests, build the frontend, and deploy the Worker (auto-provisioning D1 and Cron triggers) on every push to `main`.
-
-To use GitHub Actions instead of Cloudflare Workers Builds, add two repository secrets in GitHub (**Settings > Secrets and variables > Actions**):
-1. `CLOUDFLARE_API_TOKEN`: Create an API Token in the Cloudflare Dashboard (**My Profile > API Tokens > Create Token**) using the **Edit Cloudflare Workers** template and include **Account > D1 > Edit** permissions.
-2. `CLOUDFLARE_ACCOUNT_ID`: Your Cloudflare Account ID (found in the Cloudflare Dashboard URL or **Compute (Workers) > Workers & Pages** overview sidebar).
-
----
-
-## Option 3: Local Development & CLI Deployment (Optional)
+## Option 2: Local Development & CLI Deployment (Optional)
 
 If you want to develop locally or deploy from a terminal:
 
@@ -143,12 +133,11 @@ If you want to develop locally or deploy from a terminal:
 ## Project Structure
 
 ```text
-├── .github/workflows/deploy.yml  # GitHub Actions CI/CD using cloudflare/wrangler-action@v4
 ├── migrations/
 │   └── 0001_initial.sql          # Cloudflare D1 SQLite schema & default settings
 ├── src/
 │   ├── client/                   # React 19 + Vite SPA (Cloudflare Dashboard UI)
-│   │   ├── components/           # Navbar, Sidebar, FleetOverview, MonitorDetail, Modals, PublicStatusPage
+│   │   ├── components/           # Navbar, Sidebar, Overview, MonitorDetail, Modals, PublicStatusPage
 │   │   ├── hooks/useTheme.ts     # Auto (Local Time 06:00-18:59 Light / 19:00-05:59 Dark) + Manual theme hook
 │   │   ├── styles/index.css      # Vanilla CSS design system (Light & Dark modes)
 │   │   ├── api.ts                # Typed REST client
@@ -156,7 +145,7 @@ If you want to develop locally or deploy from a terminal:
 │   └── worker/                   # Cloudflare Worker Backend (Hono)
 │       ├── auth.ts               # Cloudflare Access JWT (Cf-Access-Jwt-Assertion) RS256 verifier
 │       ├── checker.ts            # HTTP, Keyword, JSON Query, TCP (cloudflare:sockets), DNS (DoH), Push
-│       ├── notifier.ts           # Discord, Slack, Telegram, Ntfy, Pushover & Webhook dispatcher
+│       ├── notifier.ts           # SMTP, Email API, Discord, Slack, Telegram, Ntfy, Pushover & Webhook dispatcher
 │       ├── scheduler.ts          # 1-minute Cron runner, retry state machine & D1 retention pruning
 │       └── index.ts              # Hono API routes + auto-schema bootstrap + fetch & scheduled exports
 ├── tests/

@@ -36,7 +36,7 @@ export const FleetOverview: React.FC<FleetOverviewProps> = ({
   const pausedCount = monitors.filter((m) => m.current_status === 'paused').length;
 
   const activeMonitors = monitors.filter((m) => m.active === 1);
-  const fleetUptime24h =
+  const uptime24h =
     activeMonitors.length > 0
       ? (
           activeMonitors.reduce((acc, m) => acc + (m.uptime_24h ?? 100), 0) / activeMonitors.length
@@ -44,14 +44,14 @@ export const FleetOverview: React.FC<FleetOverviewProps> = ({
       : '100.00';
 
   const withLatency = activeMonitors.filter((m) => m.avg_latency_24h > 0);
-  const avgFleetLatency =
+  const avgLatency =
     withLatency.length > 0
       ? Math.round(withLatency.reduce((acc, m) => acc + m.avg_latency_24h, 0) / withLatency.length)
       : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Top Fleet Header */}
+      {/* Top Overview Header */}
       <div
         style={{
           display: 'flex',
@@ -63,7 +63,7 @@ export const FleetOverview: React.FC<FleetOverviewProps> = ({
       >
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em' }}>
-            Cloudflare Edge Fleet Overview
+            Overview
           </h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
             Real-time synthetic monitoring across HTTP(s), Keyword, JSON, TCP Port, DNS (1.1.1.1 DoH), and Inbound Push agents.
@@ -107,10 +107,10 @@ export const FleetOverview: React.FC<FleetOverviewProps> = ({
 
         <div className="cf-kpi-card accent-orange">
           <div className="cf-kpi-label">
-            <span>24h Fleet Availability</span>
+            <span>24h Availability</span>
             <Activity size={15} style={{ color: 'var(--cf-orange)' }} />
           </div>
-          <div className="cf-kpi-value mono">{fleetUptime24h}%</div>
+          <div className="cf-kpi-value mono">{uptime24h}%</div>
           <div className="cf-kpi-sub">Rolling 24-hour SLA across active checks</div>
         </div>
 
@@ -119,7 +119,7 @@ export const FleetOverview: React.FC<FleetOverviewProps> = ({
             <span>Avg Edge Response</span>
             <Zap size={15} style={{ color: 'var(--cf-blue)' }} />
           </div>
-          <div className="cf-kpi-value mono">{avgFleetLatency} ms</div>
+          <div className="cf-kpi-value mono">{avgLatency} ms</div>
           <div className="cf-kpi-sub">Measured from Cloudflare Worker PoP</div>
         </div>
       </div>
@@ -263,7 +263,7 @@ export const FleetOverview: React.FC<FleetOverviewProps> = ({
           <div>
             <div className="cf-card-title">
               <Clock size={16} style={{ color: 'var(--cf-orange)' }} />
-              <span>Recent Fleet Incidents</span>
+              <span>Recent Incidents</span>
             </div>
             <div className="cf-card-subtitle">
               Logged automatically when a monitor crosses its consecutive retry threshold

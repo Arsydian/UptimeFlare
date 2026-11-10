@@ -98,25 +98,30 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
               type="button"
               className={`cf-theme-btn ${themePreference === 'auto' ? 'active' : ''}`}
               onClick={() => onChangeTheme('auto')}
+              title={`Auto theme by local time (6:00 AM–7:00 PM Light, 7:00 PM–6:00 AM Dark) • Currently ${
+                resolvedTheme === 'dark' ? 'Dark' : 'Light'
+              }`}
+              aria-label="Auto theme by local time"
             >
-              <Clock size={13} />
-              <span>Auto ({resolvedTheme === 'dark' ? 'Night' : 'Day'})</span>
+              <Clock size={14} />
             </button>
             <button
               type="button"
               className={`cf-theme-btn ${themePreference === 'light' ? 'active' : ''}`}
               onClick={() => onChangeTheme('light')}
+              title="Light mode"
+              aria-label="Light mode"
             >
-              <Sun size={13} />
-              <span>Light</span>
+              <Sun size={14} />
             </button>
             <button
               type="button"
               className={`cf-theme-btn ${themePreference === 'dark' ? 'active' : ''}`}
               onClick={() => onChangeTheme('dark')}
+              title="Dark mode"
+              aria-label="Dark mode"
             >
-              <Moon size={13} />
-              <span>Dark</span>
+              <Moon size={14} />
             </button>
           </div>
 

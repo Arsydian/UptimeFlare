@@ -1024,7 +1024,7 @@ app.post('/api/backup/import', async (c) => {
 });
 
 app.post('/api/cron/run', async (c) => {
-  const summary = await runScheduledChecks(c.env.uf_db);
+  const summary = await runScheduledChecks(c.env.uf_db, { forceAll: true });
   return c.json(summary);
 });
 

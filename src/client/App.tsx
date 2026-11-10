@@ -5,7 +5,6 @@ import { FleetOverview } from './components/FleetOverview';
 import { MonitorDetail } from './components/MonitorDetail';
 import { MonitorModal } from './components/MonitorModal';
 import { Navbar } from './components/Navbar';
-import { NotificationsModal } from './components/NotificationsModal';
 import { PublicStatusPage } from './components/PublicStatusPage';
 import { SettingsModal } from './components/SettingsModal';
 import { Sidebar } from './components/Sidebar';
@@ -15,7 +14,6 @@ import {
   Monitor,
   NotificationChannel,
   SiteSettings,
-  ZeroTrustIdentity,
 } from './types';
 
 const DEFAULT_SETTINGS: SiteSettings = {
@@ -31,7 +29,6 @@ export const App: React.FC = () => {
   const { preference, resolvedTheme, setPreference } = useTheme();
   const isStatusRoute = window.location.pathname.startsWith('/status');
 
-  const [identity, setIdentity] = useState<ZeroTrustIdentity | null>(null);
   const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
   const [monitors, setMonitors] = useState<Monitor[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
@@ -50,14 +47,12 @@ export const App: React.FC = () => {
     monitor?: Monitor | null;
     isClone?: boolean;
   }>({ open: false });
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const fetchDashboard = useCallback(async () => {
     if (isStatusRoute) return;
     try {
       const data = await api.getDashboard();
-      setIdentity(data.identity);
       setSettings(data.settings);
       setMonitors(data.monitors);
       setIncidents(data.incidents);
@@ -241,14 +236,12 @@ export const App: React.FC = () => {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Navbar
         settings={settings}
-        identity={identity}
         monitors={monitors}
         themePreference={preference}
         resolvedTheme={resolvedTheme}
         onChangeTheme={setPreference}
         onSelectOverview={() => setSelectedMonitorId(null)}
         onOpenAddMonitor={() => setMonitorModalState({ open: true, monitor: null })}
-        onOpenNotifications={() => setNotificationsOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
         onRunAllChecks={handleRunAllChecks}
         isCheckingAll={isCheckingAll}
@@ -265,7 +258,7 @@ export const App: React.FC = () => {
         <main className="cf-main">
           {loading ? (
             <div className="cf-card" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-              Loading Cloudflare Edge monitors...
+              Loading monitors...
             </div>
           ) : selectedMonitor ? (
             <MonitorDetail
@@ -300,17 +293,10 @@ export const App: React.FC = () => {
         />
       )}
 
-      {notificationsOpen && (
-        <NotificationsModal
-          channels={notifications}
-          onClose={() => setNotificationsOpen(false)}
-          onRefresh={fetchDashboard}
-        />
-      )}
-
       {settingsOpen && (
         <SettingsModal
           settings={settings}
+          channels={notifications}
           onClose={() => setSettingsOpen(false)}
           onRefresh={fetchDashboard}
         />

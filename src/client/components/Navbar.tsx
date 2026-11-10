@@ -1,28 +1,24 @@
 import React from 'react';
 import {
   Activity,
-  Bell,
   Clock,
   ExternalLink,
   Moon,
   Plus,
   RefreshCw,
   Settings,
-  ShieldCheck,
   Sun,
 } from 'lucide-react';
-import { Monitor, SiteSettings, ThemePreference, ZeroTrustIdentity } from '../types';
+import { Monitor, SiteSettings, ThemePreference } from '../types';
 
 interface NavbarProps {
   settings: SiteSettings;
-  identity: ZeroTrustIdentity | null;
   monitors: Monitor[];
   themePreference: ThemePreference;
   resolvedTheme: 'light' | 'dark';
   onChangeTheme: (pref: ThemePreference) => void;
   onSelectOverview: () => void;
   onOpenAddMonitor: () => void;
-  onOpenNotifications: () => void;
   onOpenSettings: () => void;
   onRunAllChecks: () => void;
   isCheckingAll: boolean;
@@ -30,14 +26,12 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   settings,
-  identity,
   monitors,
   themePreference,
   resolvedTheme,
   onChangeTheme,
   onSelectOverview,
   onOpenAddMonitor,
-  onOpenNotifications,
   onOpenSettings,
   onRunAllChecks,
   isCheckingAll,
@@ -61,7 +55,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header className="cf-navbar">
       <div className="cf-navbar-left">
-        <div className="cf-brand" onClick={onSelectOverview} title="Return to Fleet Overview">
+        <div className="cf-brand" onClick={onSelectOverview} title="Return to Overview">
           <div className="cf-brand-logo">
             <Activity size={18} />
           </div>
@@ -81,60 +75,41 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       <div className="cf-navbar-right">
-        {/* 3-Mode Dynamic Theme Switcher: Auto (Local Time) / Light / Dark */}
-        <div
-          className="cf-theme-switcher"
-          title={`Current active theme: ${resolvedTheme.toUpperCase()} (${
-            themePreference === 'auto'
-              ? 'Auto by local time: 6am-7pm Light / 7pm-6am Dark'
-              : 'Manual override'
-          })`}
-        >
+        {/* Icon-Only 3-Mode Theme Switcher: Clock (Auto) / Sun (Light) / Moon (Dark) */}
+        <div className="cf-theme-switcher">
           <button
             type="button"
             id="theme-btn-auto"
             className={`cf-theme-btn ${themePreference === 'auto' ? 'active' : ''}`}
             onClick={() => onChangeTheme('auto')}
+            title={`Auto theme by local time (6:00 AM–7:00 PM Light, 7:00 PM–6:00 AM Dark) • Currently ${
+              resolvedTheme === 'dark' ? 'Dark' : 'Light'
+            }`}
+            aria-label="Auto theme by local time"
           >
-            <Clock size={13} />
-            <span>Auto ({resolvedTheme === 'dark' ? 'Night' : 'Day'})</span>
+            <Clock size={14} />
           </button>
           <button
             type="button"
             id="theme-btn-light"
             className={`cf-theme-btn ${themePreference === 'light' ? 'active' : ''}`}
             onClick={() => onChangeTheme('light')}
+            title="Light mode"
+            aria-label="Light mode"
           >
-            <Sun size={13} />
-            <span>Light</span>
+            <Sun size={14} />
           </button>
           <button
             type="button"
             id="theme-btn-dark"
             className={`cf-theme-btn ${themePreference === 'dark' ? 'active' : ''}`}
             onClick={() => onChangeTheme('dark')}
+            title="Dark mode"
+            aria-label="Dark mode"
           >
-            <Moon size={13} />
-            <span>Dark</span>
+            <Moon size={14} />
           </button>
         </div>
-
-        {/* Zero Trust Badge */}
-        {identity && (
-          <div
-            className="cf-zt-badge"
-            title={
-              identity.mode === 'cloudflare_zero_trust'
-                ? `Protected by Cloudflare Zero Trust (${identity.email})`
-                : `Identity: ${identity.email} (${identity.mode})`
-            }
-          >
-            <ShieldCheck size={14} />
-            <span>
-              {identity.mode === 'cloudflare_zero_trust' ? 'Zero Trust' : 'Zero Trust Ready'}
-            </span>
-          </div>
-        )}
 
         <button
           type="button"
@@ -142,7 +117,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           className="btn btn-sm"
           onClick={onRunAllChecks}
           disabled={isCheckingAll}
-          title="Trigger immediate check cycle across due monitors"
+          title="Trigger an immediate manual check of all active monitors"
         >
           <RefreshCw size={14} className={isCheckingAll ? 'spin' : ''} />
           <span>{isCheckingAll ? 'Checking...' : 'Check All'}</span>
@@ -163,19 +138,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <button
           type="button"
-          id="btn-open-notifications"
-          className="btn btn-sm"
-          onClick={onOpenNotifications}
-        >
-          <Bell size={14} />
-          <span>Alerts</span>
-        </button>
-
-        <button
-          type="button"
           id="btn-open-settings"
           className="btn btn-sm"
           onClick={onOpenSettings}
+          title="Settings, Alerts & Backup"
         >
           <Settings size={14} />
           <span>Settings</span>

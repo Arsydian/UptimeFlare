@@ -53,7 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="cf-sidebar-header">
         <button
           type="button"
-          id="btn-fleet-overview"
+          id="btn-overview"
           className={`cf-monitor-item ${selectedMonitorId === null ? 'selected' : ''}`}
           onClick={() => onSelectMonitor(null)}
           style={{ padding: '8px 10px' }}
@@ -61,8 +61,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="cf-monitor-item-left">
             <LayoutGrid size={16} style={{ color: 'var(--cf-orange)' }} />
             <div className="cf-monitor-item-info">
-              <div className="cf-monitor-item-name">Fleet Overview</div>
-              <div className="cf-monitor-item-meta">All monitors & edge telemetry</div>
+              <div className="cf-monitor-item-name">Overview</div>
+              <div className="cf-monitor-item-meta">All monitors & telemetry</div>
             </div>
           </div>
           <span className="protocol-chip mono">{monitors.length}</span>

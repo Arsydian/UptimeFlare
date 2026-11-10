@@ -112,11 +112,15 @@ export async function processSingleMonitorCheck(
  * Executes all monitors whose check interval has elapsed.
  * Caps checks per cron tick to 35 to stay safely within the Cloudflare Workers Free Tier 50-subrequest limit.
  */
-export async function runScheduledChecks(db: D1Database): Promise<{
+export async function runScheduledChecks(
+  db: D1Database,
+  options?: { forceAll?: boolean }
+): Promise<{
   checkedCount: number;
   results: Array<{ monitorId: number; newStatus: MonitorStatus; latencyMs: number }>;
 }> {
   const now = Date.now();
+  const forceAll = options?.forceAll === true;
 
   const { results: activeMonitors } = await db
     .prepare('SELECT * FROM monitors WHERE active = 1 ORDER BY COALESCE(last_checked_at, 0) ASC')
@@ -126,15 +130,18 @@ export async function runScheduledChecks(db: D1Database): Promise<{
     return { checkedCount: 0, results: [] };
   }
 
-  // Filter monitors that are due (with a 5-second grace window for 60s cron jitter)
-  const dueMonitors = activeMonitors.filter((m) => {
-    if (!m.last_checked_at) return true;
-    const intervalMs = Math.max(m.interval_seconds || 60, 30) * 1000;
-    return now - m.last_checked_at >= intervalMs - 5000;
-  });
+  // When forceAll is true (manual "Check All" button), check all active non-push monitors immediately
+  // regardless of how much time remains before their next scheduled check.
+  const targetMonitors = forceAll
+    ? activeMonitors.filter((m) => m.type !== 'push')
+    : activeMonitors.filter((m) => {
+        if (!m.last_checked_at) return true;
+        const intervalMs = Math.max(m.interval_seconds || 60, 30) * 1000;
+        return now - m.last_checked_at >= intervalMs - 5000;
+      });
 
-  // Cap at 35 monitors per cron invocation to respect Cloudflare Free Tier 50-subrequest limit
-  const batchToCheck = dueMonitors.slice(0, 35);
+  // Cap at 35 monitors per invocation to respect Cloudflare Free Tier 50-subrequest limit
+  const batchToCheck = targetMonitors.slice(0, 35);
 
   const checkOutcomes = await Promise.allSettled(
     batchToCheck.map((m) => processSingleMonitorCheck(db, m))
