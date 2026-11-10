@@ -2,6 +2,7 @@ name = "uptimeflare"
 main = "src/worker/index.ts"
 compatibility_date = "2026-11-01"
 compatibility_flags = ["nodejs_compat"]
+keep_vars = true
 
 # Serve the React SPA via Cloudflare Workers Static Assets (Free & unlimited static requests)
 # run_worker_first ensures all /api/* routes always invoke the Worker script first
@@ -16,16 +17,9 @@ run_worker_first = ["/api/*"]
 crons = ["* * * * *"]
 
 # Cloudflare D1 Database Binding (Free Plan: 5 GB storage, 5M rows read/day, 100k rows written/day)
+# Omitting database_id allows Wrangler v4 / Workers Builds to automatically provision the database on first deploy,
+# or you can bind any D1 database named `DB` in the Cloudflare Dashboard (Settings -> Bindings).
 [[d1_databases]]
 binding = "DB"
 database_name = "uptimeflare-db"
-database_id = "00000000-0000-0000-0000-000000000000" # Replace with your `npx wrangler d1 create uptimeflare-db` ID
 migrations_dir = "migrations"
-
-[vars]
-# Your Cloudflare Zero Trust Team Domain (e.g., "myteam.cloudflareaccess.com")
-CF_ACCESS_TEAM_DOMAIN = ""
-# Your Cloudflare Access Application Audience (AUD) tag
-CF_ACCESS_AUD = ""
-# Set to "true" ONLY in local .dev.vars for local testing without Cloudflare Access headers
-DEV_BYPASS_AUTH = "false"

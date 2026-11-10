@@ -29,15 +29,7 @@ jobs:
       - name: Build TypeScript & React SPA assets
         run: npm run build
 
-      - name: Apply D1 Database Migrations
-        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 migrations apply uptimeflare-db --remote
-
-      - name: Deploy Worker & Static Assets
+      - name: Deploy Worker & Static Assets (Auto-provisions D1 & Cron)
         if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
         uses: cloudflare/wrangler-action@v4
         with:

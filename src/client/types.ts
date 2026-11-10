@@ -86,6 +86,8 @@ export interface SiteSettings {
   public_announcement: string;
   public_announcement_type: string;
   retention_days: string;
+  cf_access_team_domain?: string;
+  cf_access_aud?: string;
 }
 
 export interface DashboardPayload {

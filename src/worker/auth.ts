@@ -148,9 +148,28 @@ export async function verifyCloudflareAccessJwt(
 }
 
 export async function resolveZeroTrustIdentity(c: Context<{ Bindings: Env }>): Promise<ZeroTrustIdentity> {
-  const teamDomain = (c.env.CF_ACCESS_TEAM_DOMAIN || '').trim();
-  const aud = (c.env.CF_ACCESS_AUD || '').trim();
+  let teamDomain = (c.env.CF_ACCESS_TEAM_DOMAIN || '').trim();
+  let aud = (c.env.CF_ACCESS_AUD || '').trim();
   const devBypass = (c.env.DEV_BYPASS_AUTH || '').toLowerCase() === 'true';
+
+  // Fall back to in-app D1 settings if Worker environment variables are not set
+  if ((!teamDomain || !aud) && c.env.DB) {
+    try {
+      const { results } = await c.env.DB.prepare(
+        "SELECT key, value FROM settings WHERE key IN ('cf_access_team_domain', 'cf_access_aud')"
+      ).all<{ key: string; value: string }>();
+      for (const row of results || []) {
+        if (row.key === 'cf_access_team_domain' && !teamDomain && row.value.trim()) {
+          teamDomain = row.value.trim();
+        }
+        if (row.key === 'cf_access_aud' && !aud && row.value.trim()) {
+          aud = row.value.trim();
+        }
+      }
+    } catch {
+      // Ignore if settings table is not yet initialized
+    }
+  }
 
   const jwtAssertion =
     c.req.header('Cf-Access-Jwt-Assertion') ||
@@ -161,7 +180,7 @@ export async function resolveZeroTrustIdentity(c: Context<{ Bindings: Env }>): P
     c.req.header('cf-access-authenticated-user-email') ||
     '';
 
-  // 1. If CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD are configured, enforce cryptographic verification
+  // 1. If Team Domain and AUD are configured (via Worker vars or In-App Settings), enforce cryptographic verification
   if (teamDomain && aud) {
     if (!jwtAssertion) {
       return {

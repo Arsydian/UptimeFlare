@@ -40,6 +40,7 @@ export const App: React.FC = () => {
 
   const [loading, setLoading] = useState(!isStatusRoute);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [dbBindingError, setDbBindingError] = useState<string | null>(null);
   const [checkingId, setCheckingId] = useState<number | null>(null);
   const [isCheckingAll, setIsCheckingAll] = useState(false);
 
@@ -62,9 +63,12 @@ export const App: React.FC = () => {
       setIncidents(data.incidents);
       setNotifications(data.notifications);
       setAuthError(null);
+      setDbBindingError(null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load dashboard';
-      if (msg.toLowerCase().includes('unauthorized') || msg.includes('401')) {
+      if (msg.includes('DB_BINDING_MISSING') || msg.includes("D1 database binding 'DB'")) {
+        setDbBindingError(msg);
+      } else if (msg.toLowerCase().includes('unauthorized') || msg.includes('401')) {
         setAuthError(msg);
       }
     } finally {
@@ -86,6 +90,67 @@ export const App: React.FC = () => {
         resolvedTheme={resolvedTheme}
         onChangeTheme={setPreference}
       />
+    );
+  }
+
+  if (dbBindingError) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
+        }}
+      >
+        <div
+          className="cf-card"
+          style={{
+            maxWidth: 520,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 14,
+            borderTop: '3px solid var(--cf-orange)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ShieldAlert size={28} style={{ color: 'var(--cf-orange)', flexShrink: 0 }} />
+            <h1 style={{ fontSize: 18, fontWeight: 700 }}>
+              Connect Cloudflare D1 Database Binding
+            </h1>
+          </div>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 13.5, lineHeight: 1.55 }}>
+            Your UptimeFlare Worker is live, but needs a Cloudflare D1 database bound to{' '}
+            <code className="mono">DB</code>.
+          </p>
+          <ol
+            style={{
+              paddingLeft: 20,
+              color: 'var(--text-secondary)',
+              fontSize: 13,
+              lineHeight: 1.7,
+              margin: 0,
+            }}
+          >
+            <li>
+              In the Cloudflare Dashboard, go to{' '}
+              <strong>Compute (Workers) &gt; Workers &amp; Pages &gt; uptimeflare</strong>.
+            </li>
+            <li>
+              Open <strong>Settings &gt; Bindings &gt; Add binding &gt; D1 database</strong>.
+            </li>
+            <li>
+              Set <strong>Variable name</strong> to <code className="mono">DB</code>, select or
+              create <code className="mono">uptimeflare-db</code>, and click{' '}
+              <strong>Deploy</strong>.
+            </li>
+          </ol>
+          <button type="button" className="btn btn-primary" onClick={fetchDashboard}>
+            Retry Connection
+          </button>
+        </div>
+      </div>
     );
   }
 

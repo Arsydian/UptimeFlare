@@ -23,6 +23,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   );
   const [announcement, setAnnouncement] = useState(settings.public_announcement || '');
   const [retentionDays, setRetentionDays] = useState(settings.retention_days || '30');
+  const [cfTeamDomain, setCfTeamDomain] = useState(settings.cf_access_team_domain || '');
+  const [cfAud, setCfAud] = useState(settings.cf_access_aud || '');
 
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
@@ -39,6 +41,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         public_status_enabled: publicEnabled ? 'true' : 'false',
         public_announcement: announcement.trim(),
         retention_days: String(Math.max(1, Number(retentionDays) || 30)),
+        cf_access_team_domain: cfTeamDomain.trim(),
+        cf_access_aud: cfAud.trim(),
       });
       await onRefresh();
       setFeedback({ type: 'ok', text: 'Settings saved to Cloudflare D1.' });
@@ -183,6 +187,44 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   />
                   <span>Enable Public Read-Only Status Page at /status</span>
                 </label>
+              </div>
+            </div>
+
+            <hr style={{ border: 'none', borderTop: '1px solid var(--border-subtle)' }} />
+
+            <div className="form-grid">
+              <div className="form-field full">
+                <div className="form-label">
+                  Cloudflare Zero Trust (In-Worker JWT Verification)
+                </div>
+                <span className="form-hint">
+                  Optional: Enter your Cloudflare Access Team Domain and Application Audience (AUD)
+                  Tag to enforce RS256 cryptographic JWT verification inside the Worker (can also
+                  be set via Worker Variables <code>CF_ACCESS_TEAM_DOMAIN</code> and{' '}
+                  <code>CF_ACCESS_AUD</code>).
+                </span>
+              </div>
+
+              <div className="form-field">
+                <label className="form-label">Team Domain</label>
+                <input
+                  type="text"
+                  className="form-input mono"
+                  placeholder="my-team.cloudflareaccess.com"
+                  value={cfTeamDomain}
+                  onChange={(e) => setCfTeamDomain(e.target.value)}
+                />
+              </div>
+
+              <div className="form-field">
+                <label className="form-label">Application Audience (AUD) Tag</label>
+                <input
+                  type="text"
+                  className="form-input mono"
+                  placeholder="e.g. 737646a56ab1df6ec9bddc7e5ca84eaf..."
+                  value={cfAud}
+                  onChange={(e) => setCfAud(e.target.value)}
+                />
               </div>
             </div>
 

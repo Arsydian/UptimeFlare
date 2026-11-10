@@ -87,4 +87,6 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
   ('public_announcement', ''),
   ('public_announcement_type', 'info'),
   ('retention_days', '30'),
+  ('cf_access_team_domain', ''),
+  ('cf_access_aud', ''),
   ('last_cleanup_at', '0');

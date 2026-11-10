@@ -116,6 +116,8 @@ async function ensureSchema(db: D1Database): Promise<void> {
           ('public_announcement', ''),
           ('public_announcement_type', 'info'),
           ('retention_days', '30'),
+          ('cf_access_team_domain', ''),
+          ('cf_access_aud', ''),
           ('last_cleanup_at', '0')
       `),
     ]);
@@ -140,6 +142,8 @@ async function getSettingsMap(db: D1Database): Promise<Record<string, string>> {
     public_announcement: '',
     public_announcement_type: 'info',
     retention_days: '30',
+    cf_access_team_domain: '',
+    cf_access_aud: '',
   };
   for (const r of results || []) {
     out[r.key] = r.value;
@@ -359,7 +363,20 @@ app.all('/api/push/:token', async (c) => {
 
 app.use('/api/*', async (c, next) => {
   const path = new URL(c.req.url).pathname;
-  if (path === '/api/health' || path === '/api/public/status' || path.startsWith('/api/push/')) {
+  if (path === '/api/health') {
+    return next();
+  }
+  if (!c.env.DB) {
+    return c.json(
+      {
+        error:
+          "D1 database binding 'DB' is not configured. In the Cloudflare Dashboard, open Workers & Pages -> uptimeflare -> Settings -> Bindings and add a D1 database binding with Variable name 'DB'.",
+        code: 'DB_BINDING_MISSING',
+      },
+      503
+    );
+  }
+  if (path === '/api/public/status' || path.startsWith('/api/push/')) {
     return next();
   }
   await ensureSchema(c.env.DB);
@@ -869,6 +886,8 @@ app.put('/api/settings', async (c) => {
     'public_announcement',
     'public_announcement_type',
     'retention_days',
+    'cf_access_team_domain',
+    'cf_access_aud',
   ];
 
   const statements = [];
@@ -1020,6 +1039,7 @@ app.all('*', async (c) => {
 export default {
   fetch: app.fetch,
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    if (!env.DB) return;
     ctx.waitUntil(
       (async () => {
         await ensureSchema(env.DB);
