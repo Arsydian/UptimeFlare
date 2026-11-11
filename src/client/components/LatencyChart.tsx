@@ -99,7 +99,7 @@ export const LatencyChart: React.FC<LatencyChartProps> = ({
             justifyContent: 'center',
             color: 'var(--text-muted)',
             border: '1px dashed var(--border-subtle)',
-            borderRadius: 6,
+            borderRadius: 'var(--radius-md)',
           }}
         >
           Click &ldquo;Check Now&rdquo; to capture your first edge latency sample.
@@ -113,8 +113,8 @@ export const LatencyChart: React.FC<LatencyChartProps> = ({
           >
             <defs>
               <linearGradient id="cfLatencyGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#F6821F" stopOpacity="0.34" />
-                <stop offset="100%" stopColor="#F6821F" stopOpacity="0.0" />
+                <stop offset="0%" stopColor="#ff5e1f" stopOpacity="0.34" />
+                <stop offset="100%" stopColor="#ff5e1f" stopOpacity="0.0" />
               </linearGradient>
             </defs>
 
@@ -151,7 +151,7 @@ export const LatencyChart: React.FC<LatencyChartProps> = ({
             {stats.points.length > 1 && (
               <polyline
                 fill="none"
-                stroke="#F6821F"
+                stroke="#ff5e1f"
                 strokeWidth="2.2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -166,7 +166,7 @@ export const LatencyChart: React.FC<LatencyChartProps> = ({
                   cx={pt.x}
                   cy={pt.y}
                   r={hoverIndex === idx ? 4.5 : pt.beat.status === 'down' ? 3.5 : 2}
-                  fill={pt.beat.status === 'down' ? 'var(--status-down)' : '#F6821F'}
+                  fill={pt.beat.status === 'down' ? 'var(--status-down)' : '#ff5e1f'}
                 />
                 <rect
                   x={pt.x - Math.max(plotW / stats.points.length / 2, 4)}

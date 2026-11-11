@@ -269,7 +269,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div
                   style={{
                     padding: '10px 12px',
-                    borderRadius: 6,
+                    borderRadius: 'var(--radius-md)',
                     fontSize: 13,
                     background:
                       feedback.type === 'ok' ? 'var(--status-up-bg)' : 'var(--status-down-bg)',
@@ -453,7 +453,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div
                   style={{
                     padding: '12px',
-                    borderRadius: 6,
+                    borderRadius: 'var(--radius-md)',
                     background: 'var(--bg-elevated)',
                     border: '1px solid var(--border-subtle)',
                     color: 'var(--text-muted)',
@@ -473,7 +473,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         padding: '10px 12px',
-                        borderRadius: 6,
+                        borderRadius: 'var(--radius-md)',
                         background: 'var(--bg-elevated)',
                         border: '1px solid var(--border-subtle)',
                       }}
@@ -511,7 +511,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div
                   style={{
                     padding: '9px 12px',
-                    borderRadius: 6,
+                    borderRadius: 'var(--radius-md)',
                     fontSize: 13,
                     background:
                       alertFeedback.type === 'ok' ? 'var(--status-up-bg)' : 'var(--status-down-bg)',

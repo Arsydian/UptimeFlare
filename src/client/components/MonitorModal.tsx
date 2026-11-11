@@ -183,7 +183,7 @@ export const MonitorModal: React.FC<MonitorModalProps> = ({
               <div
                 style={{
                   padding: '10px 12px',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-md)',
                   background: 'var(--status-down-bg)',
                   border: '1px solid var(--status-down-border)',
                   color: 'var(--status-down)',
@@ -561,7 +561,7 @@ export const MonitorModal: React.FC<MonitorModalProps> = ({
               <div
                 style={{
                   padding: '10px 14px',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius-md)',
                   background:
                     probeState.result?.status === 'up'
                       ? 'var(--status-up-bg)'

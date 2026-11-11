@@ -123,7 +123,7 @@ export const FleetOverview: React.FC<FleetOverviewProps> = ({
             style={{
               width: 48,
               height: 48,
-              borderRadius: 12,
+              borderRadius: 'var(--radius-lg)',
               background: 'var(--cf-orange-soft)',
               color: 'var(--cf-orange)',
               display: 'flex',
@@ -162,7 +162,7 @@ export const FleetOverview: React.FC<FleetOverviewProps> = ({
                 key={m.id}
                 style={{
                   border: '1px solid var(--border-subtle)',
-                  borderRadius: 8,
+                  borderRadius: 'var(--radius-lg)',
                   padding: '14px 16px',
                   background: 'var(--bg-elevated)',
                   display: 'flex',

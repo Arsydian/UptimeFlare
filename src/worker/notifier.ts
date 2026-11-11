@@ -345,7 +345,7 @@ export async function dispatchChannelAlert(
         const webhookUrl = (config.webhook_url || '').trim();
         if (!webhookUrl) return { ok: false, error: 'Missing Discord webhook_url' };
 
-        const color = isTest ? 0xf6821f : isUp ? 0x10b981 : 0xef4444;
+        const color = isTest ? 0xff5e1f : isUp ? 0x10b981 : 0xef4444;
         const res = await fetch(webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
