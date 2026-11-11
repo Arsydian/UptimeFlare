@@ -180,7 +180,14 @@ export const FleetOverview: React.FC<FleetOverviewProps> = ({
                   }}
                 >
                   <div
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      cursor: 'pointer',
+                      flexWrap: 'wrap',
+                      minWidth: 0,
+                    }}
                     onClick={() => onSelectMonitor(m.id)}
                   >
                     <span className={`status-badge ${m.current_status}`}>{m.current_status}</span>
@@ -188,7 +195,11 @@ export const FleetOverview: React.FC<FleetOverviewProps> = ({
                     <span className="protocol-chip mono">{m.type}</span>
                     <span
                       className="mono"
-                      style={{ fontSize: 12, color: 'var(--text-secondary)' }}
+                      style={{
+                        fontSize: 12,
+                        color: 'var(--text-secondary)',
+                        wordBreak: 'break-all',
+                      }}
                     >
                       {m.url_or_host}
                       {m.port ? `:${m.port}` : ''}

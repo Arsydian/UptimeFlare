@@ -1,13 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Activity,
   Clock,
   ExternalLink,
+  Menu,
   Moon,
   Plus,
   RefreshCw,
   Settings,
   Sun,
+  X,
 } from 'lucide-react';
 import { Monitor, SiteSettings, ThemePreference } from '../types';
 
@@ -36,6 +38,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRunAllChecks,
   isCheckingAll,
 }) => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   const upCount = monitors.filter((m) => m.current_status === 'up').length;
   const downCount = monitors.filter((m) => m.current_status === 'down').length;
   const degradedCount = monitors.filter((m) => m.current_status === 'degraded').length;
@@ -54,27 +58,55 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="cf-navbar">
-      <div className="cf-navbar-left">
-        <div className="cf-brand" onClick={onSelectOverview} title="Return to Overview">
-          <div className="cf-brand-logo">
-            <Activity size={18} />
-          </div>
-          <div className="cf-brand-text">
-            <div className="cf-brand-title">
-              <span>{settings.site_title || 'UptimeFlare'}</span>
+      <div className="cf-navbar-top">
+        <div className="cf-navbar-left">
+          <div
+            className="cf-brand"
+            onClick={() => {
+              onSelectOverview();
+              setMobileMenuOpen(false);
+            }}
+            title="Return to Overview"
+          >
+            <div className="cf-brand-logo">
+              <Activity size={18} />
+            </div>
+            <div className="cf-brand-text">
+              <div className="cf-brand-title">
+                <span>{settings.site_title || 'UptimeFlare'}</span>
+              </div>
             </div>
           </div>
+
+          <div className="cf-nav-divider" />
+
+          <div
+            className="cf-global-health-pill"
+            onClick={() => {
+              onSelectOverview();
+              setMobileMenuOpen(false);
+            }}
+            style={{ cursor: 'pointer' }}
+          >
+            <span className={`status-dot ${overallState}`} />
+            <span className="tabular">{overallLabel}</span>
+          </div>
         </div>
 
-        <div className="cf-nav-divider" />
-
-        <div className="cf-global-health-pill" onClick={onSelectOverview} style={{ cursor: 'pointer' }}>
-          <span className={`status-dot ${overallState}`} />
-          <span className="tabular">{overallLabel}</span>
-        </div>
+        {/* Mobile Sandwich Menu Button (hidden on desktop) */}
+        <button
+          type="button"
+          id="btn-mobile-menu"
+          className="btn btn-icon cf-mobile-menu-btn"
+          onClick={() => setMobileMenuOpen((prev) => !prev)}
+          aria-label="Toggle menu"
+          aria-expanded={mobileMenuOpen}
+        >
+          {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+        </button>
       </div>
 
-      <div className="cf-navbar-right">
+      <div className={`cf-navbar-right ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         {/* Icon-Only 3-Mode Theme Switcher: Clock (Auto) / Sun (Light) / Moon (Dark) */}
         <div className="cf-theme-switcher">
           <button
@@ -115,7 +147,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           type="button"
           id="btn-run-all-checks"
           className="btn btn-sm"
-          onClick={onRunAllChecks}
+          onClick={() => {
+            onRunAllChecks();
+            setMobileMenuOpen(false);
+          }}
           disabled={isCheckingAll}
           title="Trigger an immediate manual check of all active monitors"
         >
@@ -140,7 +175,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           type="button"
           id="btn-open-settings"
           className="btn btn-sm"
-          onClick={onOpenSettings}
+          onClick={() => {
+            onOpenSettings();
+            setMobileMenuOpen(false);
+          }}
           title="Settings, Alerts & Backup"
         >
           <Settings size={14} />
@@ -151,7 +189,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           type="button"
           id="btn-add-monitor"
           className="btn btn-primary btn-sm"
-          onClick={onOpenAddMonitor}
+          onClick={() => {
+            onOpenAddMonitor();
+            setMobileMenuOpen(false);
+          }}
         >
           <Plus size={15} />
           <span>Add Monitor</span>

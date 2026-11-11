@@ -127,6 +127,9 @@
 html,
 body {
   height: 100%;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
   background-color: var(--bg-canvas);
   color: var(--text-primary);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -170,16 +173,23 @@ button {
   top: 0;
   z-index: 40;
   min-height: 60px;
-  height: auto;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border-subtle);
   border-top: 3px solid var(--cf-orange);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  padding: 10px 20px;
-  gap: 10px 16px;
+  padding: 0 20px;
+  gap: 16px;
+  max-width: 100%;
+}
+
+.cf-navbar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
 }
 
 .cf-navbar-left {
@@ -187,7 +197,10 @@ button {
   align-items: center;
   gap: 14px;
   min-width: 0;
-  flex-wrap: wrap;
+}
+
+.cf-mobile-menu-btn {
+  display: none;
 }
 
 .cf-brand {
@@ -385,8 +398,10 @@ button {
 
 .cf-workspace {
   display: grid;
-  grid-template-columns: 350px 1fr;
+  grid-template-columns: 350px minmax(0, 1fr);
   min-height: calc(100vh - 60px);
+  width: 100%;
+  max-width: 100%;
 }
 
 /* Left Monitor Sidebar */
@@ -398,6 +413,8 @@ button {
   height: calc(100vh - 60px);
   position: sticky;
   top: 60px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .cf-sidebar-header {
@@ -632,6 +649,7 @@ button {
   gap: 20px;
   max-width: 1320px;
   width: 100%;
+  min-width: 0;
   margin: 0 auto;
 }
 
@@ -641,6 +659,8 @@ button {
   border-radius: 8px;
   padding: 20px;
   box-shadow: var(--shadow-sm);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .cf-card-header {
@@ -670,6 +690,7 @@ button {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 14px;
+  min-width: 0;
 }
 
 .cf-kpi-card {
@@ -682,6 +703,7 @@ button {
   gap: 6px;
   position: relative;
   overflow: hidden;
+  min-width: 0;
 }
 
 .cf-kpi-card::before {
@@ -1125,7 +1147,7 @@ button {
 /* Responsive Breakpoints */
 @media (max-width: 960px) {
   .cf-workspace {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .cf-sidebar {
@@ -1147,29 +1169,88 @@ button {
 
 @media (max-width: 680px) {
   .cf-navbar {
-    padding: 10px 12px;
-    gap: 8px;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 10px 14px;
+    gap: 0;
+  }
+
+  .cf-navbar-top {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
   }
 
   .cf-navbar-left {
-    width: 100%;
+    flex: 1;
+    display: flex;
+    align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 10px;
+    min-width: 0;
   }
 
+  /* On mobile, show only the logo, operational status pill, and menu sandwich button */
+  .cf-brand-text,
   .cf-nav-divider {
     display: none;
   }
 
-  .cf-navbar-right {
-    width: 100%;
-    justify-content: space-between;
-    gap: 6px;
+  .cf-mobile-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
 
-  .cf-navbar-right .btn-sm {
-    padding: 6px 9px;
-    font-size: 12px;
+  .cf-navbar-right {
+    display: none;
+    width: 100%;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-subtle);
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .cf-navbar-right.mobile-open {
+    display: flex;
+  }
+
+  .cf-main {
+    padding: 14px 12px;
+    gap: 14px;
+  }
+
+  .cf-card {
+    padding: 14px;
+  }
+
+  .cf-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .cf-kpi-card {
+    padding: 12px 14px;
+  }
+
+  .cf-kpi-value {
+    font-size: 21px;
+  }
+
+  .hb-ticks {
+    gap: 1.5px;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .hb-tick {
+    min-width: 0;
   }
 
   .modal-header {
