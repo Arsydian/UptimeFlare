@@ -19,6 +19,9 @@ crons = ["* * * * *"]
 # Cloudflare D1 Database Binding (Free Plan: 5 GB storage, 5M rows read/day, 100k rows written/day)
 # Omitting database_id allows Wrangler v4 / Workers Builds to automatically provision the database on first deploy,
 # or you can bind a D1 database named `uf_db` in the Cloudflare Dashboard (Settings -> Bindings).
+
+
+
 [[d1_databases]]
 binding = "uf_db"
 database_name = "uf_db"
@@ -27,6 +30,6 @@ migrations_dir = "migrations"
 # Optional: Cloudflare Email Routing (Send Email) Binding for native zero-key email notifications.
 # You can either uncomment the block below or attach a Send Email binding named `EMAIL` directly in the
 # Cloudflare Dashboard (Workers & Pages -> uptimeflare -> Settings -> Bindings -> Add -> Send Email).
-# [[send_email]]
-# name = "EMAIL"
+[[send_email]]
+name = "EMAIL"
 
