@@ -1,6 +1,7 @@
 export type MonitorType = 'http' | 'keyword' | 'json-query' | 'tcp' | 'dns' | 'push';
 export type MonitorStatus = 'up' | 'down' | 'degraded' | 'paused' | 'pending';
 export type NotificationProvider =
+  | 'cf-email'
   | 'smtp'
   | 'email'
   | 'discord'

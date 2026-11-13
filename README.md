@@ -25,8 +25,8 @@ Styled after the **Cloudflare Dashboard UI**, UptimeFlare features a **3-Mode Th
 - **In-App or Environment Variable Setup**: Configure your Zero Trust **Team Domain** and **Application Audience (AUD) Tag** directly inside UptimeFlare's **Settings** modal in your browser (stored in Cloudflare D1), or via Cloudflare Worker Variables (`CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD`).
 - **Opt-In Public Status Page (`/status`)**: Disabled by default. Can be toggled on at any time in the **Settings** modal.
 
-### 4. Multi-Channel Alerting (Including Direct SMTP & Email API)
-- Supports **Email via Direct SMTP (`smtp`)** over `cloudflare:sockets` (STARTTLS on ports `587`/`2525` or implicit SSL/TLS on port `465` with `AUTH PLAIN` / `AUTH LOGIN`), **Transactional Email API (`email`)** (Resend and SendGrid), **Discord** (rich embeds), **Slack** (Block Kit), **Telegram** (`sendMessage` Bot API), **Ntfy.sh**, **Pushover**, and **Generic Custom Webhooks (JSON POST)** with optional custom secret headers.
+### 4. Multi-Channel Alerting (Cloudflare Email Routing, Direct SMTP & Email API)
+- Supports **Cloudflare Email Routing (`cf-email`)** via Cloudflare's native free `send_email` Worker binding (`cloudflare:email` — zero API keys or external SMTP servers required), **Email via Direct SMTP (`smtp`)** over `cloudflare:sockets` (STARTTLS on ports `587`/`2525` or implicit SSL/TLS on port `465` with `AUTH PLAIN` / `AUTH LOGIN`), **Transactional Email API (`email`)** (Resend and SendGrid), **Discord** (rich embeds), **Slack** (Block Kit), **Telegram** (`sendMessage` Bot API), **Ntfy.sh**, **Pushover**, and **Generic Custom Webhooks (JSON POST)** with optional custom secret headers.
 - Includes a **Send Test Alert** button in the dashboard, consecutive failure retry thresholds (`max_retries`) before opening an incident and alerting `DOWN`, and automatic `UP` recovery alerts with total downtime duration.
 
 ---
@@ -93,7 +93,11 @@ To protect your UptimeFlare dashboard behind **Cloudflare Access** ([official do
 ### Step 3: Add Monitors & Alert Channels in the Dashboard
 Open your UptimeFlare URL and use the web UI to:
 - Click **Add Monitor** to add HTTP(s), Keyword, JSON Query, TCP Port, DNS Record, or Inbound Push monitors (and test them live with **Test Monitor Check**).
-- Click **Settings > Alerts** to configure Direct SMTP, Email API (Resend / SendGrid), Discord, Slack, Telegram, Ntfy, Pushover, or Custom Webhook alerts (and verify them with **Send Test Alert**).
+- Click **Settings > Alerts** to configure **Cloudflare Email Routing**, Direct SMTP, Email API (Resend / SendGrid), Discord, Slack, Telegram, Ntfy, Pushover, or Custom Webhook alerts (and verify them with **Send Test Alert**).
+  - **Using Cloudflare Email Routing (Free Native Binding)**:
+    1. In the Cloudflare Dashboard, ensure your recipient email is verified under **Email > Email Routing > Destination addresses**.
+    2. Go to **Workers & Pages > uptimeflare > Settings > Bindings > Add > Send Email**, and set **Variable name** to `EMAIL`.
+    3. In UptimeFlare under **Settings > Alerts**, select **Cloudflare Email Routing (Native Free Binding)**, enter a `From` address on your Email Routing domain (e.g. `UptimeFlare <alerts@yourdomain.com>`), and enter your verified destination email address(es).
 - Click **Settings > General & Backup** to customize your status page title, toggle the Public Status Page (`/status`), set the D1 retention period, or export/import JSON configuration backups.
 
 ---

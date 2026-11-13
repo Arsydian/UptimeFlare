@@ -222,9 +222,56 @@ async function sendSmtpEmail(options: {
   }
 }
 
+async function sendCloudflareRoutingEmail(options: {
+  emailBinding?: SendEmail;
+  from: string;
+  to: string[];
+  subject: string;
+  bodyText: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  if (!options.emailBinding) {
+    return {
+      ok: false,
+      error:
+        'Cloudflare Email Routing binding `EMAIL` is not attached. In the Cloudflare Dashboard, go to Workers & Pages -> uptimeflare -> Settings -> Bindings -> Add -> Send Email, and set the Variable name to `EMAIL`.',
+    };
+  }
+
+  const { EmailMessage } = await import('cloudflare:email');
+  const fromAddr = extractEmailAddress(options.from);
+  const safeSubject = options.subject.replace(/[\r\n]+/g, ' ');
+  const normalizedBody = options.bodyText.replace(/\r?\n/g, '\r\n');
+
+  for (const rcpt of options.to) {
+    const toAddr = extractEmailAddress(rcpt);
+    const msgId = `<${Date.now()}.${Math.random().toString(36).slice(2)}@${
+      fromAddr.split('@')[1] || 'uptimeflare.worker'
+    }>`;
+
+    const rawMime = [
+      `From: ${options.from}`,
+      `To: ${rcpt}`,
+      `Subject: =?UTF-8?B?${toBase64Utf8(safeSubject)}?=`,
+      `Date: ${new Date().toUTCString()}`,
+      `Message-ID: ${msgId}`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset=utf-8',
+      'Content-Transfer-Encoding: 8bit',
+      '',
+      normalizedBody,
+    ].join('\r\n');
+
+    const message = new EmailMessage(fromAddr, toAddr, rawMime);
+    await options.emailBinding.send(message);
+  }
+
+  return { ok: true };
+}
+
 export async function dispatchChannelAlert(
   channel: NotificationChannelRow,
-  alert: AlertEvent
+  alert: AlertEvent,
+  emailBinding?: SendEmail
 ): Promise<{ ok: boolean; error?: string }> {
   let config: Record<string, string> = {};
   try {
@@ -254,6 +301,29 @@ export async function dispatchChannelAlert(
 
   try {
     switch (channel.provider) {
+      case 'cf-email': {
+        const from = (config.from_email || '').trim();
+        const toList = (config.to_email || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        if (!from || toList.length === 0) {
+          return {
+            ok: false,
+            error: 'Missing From email or To destination email address',
+          };
+        }
+
+        return await sendCloudflareRoutingEmail({
+          emailBinding,
+          from,
+          to: toList,
+          subject: `[UptimeFlare] ${title}`,
+          bodyText: plainText,
+        });
+      }
+
       case 'smtp': {
         const host = (config.smtp_host || '').trim();
         const port = Number(config.smtp_port) || 587;
@@ -511,7 +581,8 @@ export async function notifyMonitorTransition(
   monitor: MonitorRow,
   event: 'down' | 'up',
   result: CheckResult,
-  downtimeSeconds?: number
+  downtimeSeconds?: number,
+  emailBinding?: SendEmail
 ): Promise<void> {
   const { results: channels } = await db
     .prepare('SELECT * FROM notification_channels WHERE active = 1')
@@ -549,5 +620,7 @@ export async function notifyMonitorTransition(
     timestamp: Date.now(),
   };
 
-  await Promise.allSettled(targetChannels.map((ch) => dispatchChannelAlert(ch, alertPayload)));
+  await Promise.allSettled(
+    targetChannels.map((ch) => dispatchChannelAlert(ch, alertPayload, emailBinding))
+  );
 }

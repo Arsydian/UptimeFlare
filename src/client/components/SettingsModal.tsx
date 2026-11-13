@@ -37,7 +37,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Alert Channels State
   const [channelName, setChannelName] = useState('');
-  const [provider, setProvider] = useState<NotificationProvider>('smtp');
+  const [provider, setProvider] = useState<NotificationProvider>('cf-email');
   const [webhookUrl, setWebhookUrl] = useState('');
   const [botToken, setBotToken] = useState('');
   const [chatId, setChatId] = useState('');
@@ -131,6 +131,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const buildAlertConfig = (): Record<string, string> => {
     switch (provider) {
+      case 'cf-email':
+        return {
+          from_email: fromEmail.trim(),
+          to_email: toEmail.trim(),
+        };
       case 'smtp':
         return {
           smtp_host: smtpHost.trim(),
@@ -536,6 +541,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     value={provider}
                     onChange={(e) => setProvider(e.target.value as NotificationProvider)}
                   >
+                    <option value="cf-email">Cloudflare Email Routing (Native Free Binding)</option>
                     <option value="smtp">Email (Direct SMTP / STARTTLS / SSL)</option>
                     <option value="email">Email API (Resend / SendGrid)</option>
                     <option value="discord">Discord Webhook</option>
@@ -557,6 +563,48 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onChange={(e) => setChannelName(e.target.value)}
                   />
                 </div>
+
+                {provider === 'cf-email' && (
+                  <>
+                    <div className="form-field">
+                      <label className="form-label">From Email (Email Routing Domain)</label>
+                      <input
+                        type="text"
+                        className="form-input mono"
+                        placeholder="UptimeFlare <alerts@yourdomain.com>"
+                        value={fromEmail}
+                        onChange={(e) => setFromEmail(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label className="form-label">
+                        To Destination Email (Verified in Cloudflare)
+                      </label>
+                      <input
+                        type="text"
+                        className="form-input mono"
+                        placeholder="admin@example.com, ops@example.com"
+                        value={toEmail}
+                        onChange={(e) => setToEmail(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="form-field full">
+                      <span className="form-hint">
+                        Uses Cloudflare&apos;s native <code>send_email</code> Worker binding (
+                        <code>cloudflare:email</code>) with zero API keys or SMTP servers. In the
+                        Cloudflare Dashboard, go to{' '}
+                        <strong>
+                          Workers &amp; Pages &rarr; uptimeflare &rarr; Settings &rarr; Bindings
+                          &rarr; Add &rarr; Send Email
+                        </strong>{' '}
+                        and set the Variable name to <code>EMAIL</code>. All recipient addresses
+                        must be verified under <strong>Email &rarr; Email Routing &rarr; Destination addresses</strong>.
+                      </span>
+                    </div>
+                  </>
+                )}
 
                 {provider === 'smtp' && (
                   <>

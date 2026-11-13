@@ -343,12 +343,17 @@ app.all('/api/push/:token', async (c) => {
   const pingParam = Number(c.req.query('ping') || '1');
   const latencyMs = Number.isNaN(pingParam) || pingParam < 0 ? 1 : Math.round(pingParam);
 
-  const outcome = await processSingleMonitorCheck(c.env.uf_db, monitor, {
-    status: statusParam === 'down' ? 'down' : 'up',
-    latency_ms: latencyMs,
-    status_code: statusParam === 'down' ? 500 : 200,
-    message: msgParam,
-  });
+  const outcome = await processSingleMonitorCheck(
+    c.env.uf_db,
+    monitor,
+    {
+      status: statusParam === 'down' ? 'down' : 'up',
+      latency_ms: latencyMs,
+      status_code: statusParam === 'down' ? 500 : 200,
+      message: msgParam,
+    },
+    c.env.EMAIL
+  );
 
   return c.json({
     ok: true,
@@ -594,7 +599,7 @@ app.post('/api/monitors', async (c) => {
 
   // Trigger an immediate initial check for active non-push monitors
   if (createdMonitor && createdMonitor.active === 1 && createdMonitor.type !== 'push') {
-    await processSingleMonitorCheck(c.env.uf_db, createdMonitor);
+    await processSingleMonitorCheck(c.env.uf_db, createdMonitor, undefined, c.env.EMAIL);
   }
 
   const updated = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE id = ?')
@@ -722,7 +727,7 @@ app.patch('/api/monitors/:id/toggle', async (c) => {
     .first<MonitorRow>();
 
   if (refreshed && nextActive === 1 && refreshed.type !== 'push') {
-    await processSingleMonitorCheck(c.env.uf_db, refreshed);
+    await processSingleMonitorCheck(c.env.uf_db, refreshed, undefined, c.env.EMAIL);
   }
 
   const finalRow = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE id = ?')
@@ -742,7 +747,7 @@ app.post('/api/monitors/:id/check', async (c) => {
     return c.json({ error: 'Monitor not found' }, 404);
   }
 
-  const outcome = await processSingleMonitorCheck(c.env.uf_db, monitor);
+  const outcome = await processSingleMonitorCheck(c.env.uf_db, monitor, undefined, c.env.EMAIL);
   const updated = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE id = ?')
     .bind(id)
     .first<MonitorRow>();
@@ -849,23 +854,27 @@ app.post('/api/notifications/test', async (c) => {
     created_at: Date.now(),
   };
 
-  const result = await dispatchChannelAlert(mockChannel, {
-    monitor: {
-      id: 0,
-      name: 'Cloudflare Edge Test Monitor',
-      type: 'http',
-      url_or_host: 'https://1.1.1.1',
-      group_name: 'Core Infrastructure',
+  const result = await dispatchChannelAlert(
+    mockChannel,
+    {
+      monitor: {
+        id: 0,
+        name: 'Cloudflare Edge Test Monitor',
+        type: 'http',
+        url_or_host: 'https://1.1.1.1',
+        group_name: 'Core Infrastructure',
+      },
+      event: 'test',
+      result: {
+        status: 'up',
+        latency_ms: 14,
+        status_code: 200,
+        message: 'Test notification triggered from UptimeFlare Dashboard',
+      },
+      timestamp: Date.now(),
     },
-    event: 'test',
-    result: {
-      status: 'up',
-      latency_ms: 14,
-      status_code: 200,
-      message: 'Test notification triggered from UptimeFlare Dashboard',
-    },
-    timestamp: Date.now(),
-  });
+    c.env.EMAIL
+  );
 
   if (!result.ok) {
     return c.json({ ok: false, error: result.error }, 400);
@@ -1024,7 +1033,10 @@ app.post('/api/backup/import', async (c) => {
 });
 
 app.post('/api/cron/run', async (c) => {
-  const summary = await runScheduledChecks(c.env.uf_db, { forceAll: true });
+  const summary = await runScheduledChecks(c.env.uf_db, {
+    forceAll: true,
+    emailBinding: c.env.EMAIL,
+  });
   return c.json(summary);
 });
 
@@ -1043,7 +1055,7 @@ export default {
     ctx.waitUntil(
       (async () => {
         await ensureSchema(env.uf_db);
-        await runScheduledChecks(env.uf_db);
+        await runScheduledChecks(env.uf_db, { emailBinding: env.EMAIL });
       })()
     );
   },

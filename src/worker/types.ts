@@ -1,6 +1,7 @@
 export type MonitorType = 'http' | 'keyword' | 'json-query' | 'tcp' | 'dns' | 'push';
 export type MonitorStatus = 'up' | 'down' | 'degraded' | 'paused' | 'pending';
 export type NotificationProvider =
+  | 'cf-email'
   | 'smtp'
   | 'email'
   | 'discord'
@@ -12,6 +13,7 @@ export type NotificationProvider =
 
 export interface Env {
   uf_db: D1Database;
+  EMAIL?: SendEmail;
   ASSETS?: Fetcher;
   CF_ACCESS_TEAM_DOMAIN?: string;
   CF_ACCESS_AUD?: string;
