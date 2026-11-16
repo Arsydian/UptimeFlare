@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS heartbeats (
 
 CREATE INDEX IF NOT EXISTS idx_heartbeats_monitor_time ON heartbeats(monitor_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_heartbeats_timestamp ON heartbeats(timestamp);
+CREATE INDEX IF NOT EXISTS idx_heartbeats_stats ON heartbeats(monitor_id, timestamp, status, latency_ms);
 
 CREATE TABLE IF NOT EXISTS incidents (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

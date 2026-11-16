@@ -74,8 +74,21 @@ export const App: React.FC = () => {
   useEffect(() => {
     if (isStatusRoute) return;
     fetchDashboard();
-    const interval = setInterval(fetchDashboard, 15000);
-    return () => clearInterval(interval);
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchDashboard();
+      }
+    }, 30000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchDashboard();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, [fetchDashboard, isStatusRoute]);
 
   if (isStatusRoute) {

@@ -169,7 +169,14 @@ export async function runScheduledChecks(
   return { checkedCount: summary.length, results: summary };
 }
 
+let lastCleanupCheckAt = 0;
+
 async function maybeRunRetentionCleanup(db: D1Database, now: number): Promise<void> {
+  const sixHoursMs = 6 * 60 * 60 * 1000;
+  if (lastCleanupCheckAt > 0 && now - lastCleanupCheckAt < sixHoursMs) {
+    return;
+  }
+
   const { results: settingsRows } = await db
     .prepare("SELECT key, value FROM settings WHERE key IN ('retention_days', 'last_cleanup_at')")
     .all<{ key: string; value: string }>();
@@ -180,11 +187,12 @@ async function maybeRunRetentionCleanup(db: D1Database, now: number): Promise<vo
   }
 
   const lastCleanup = Number(map.get('last_cleanup_at') || '0');
-  const sixHoursMs = 6 * 60 * 60 * 1000;
   if (now - lastCleanup < sixHoursMs) {
+    lastCleanupCheckAt = lastCleanup;
     return;
   }
 
+  lastCleanupCheckAt = now;
   const retentionDays = Math.max(1, Number(map.get('retention_days') || '30'));
   const cutoffTime = now - retentionDays * 24 * 60 * 60 * 1000;
 

@@ -14,8 +14,13 @@ interface JwksResponse {
   keys: JwkKey[];
 }
 
-// In-memory edge cache for Cloudflare Access public keys
+// In-memory edge cache for Cloudflare Access public keys and D1 settings
 let cachedJwks: { domain: string; keys: JwkKey[]; expiresAt: number } | null = null;
+let cachedAccessSettings: { teamDomain: string; aud: string; expiresAt: number } | null = null;
+
+export function invalidateAccessSettingsCache(): void {
+  cachedAccessSettings = null;
+}
 
 function base64UrlToUint8Array(base64Url: string): Uint8Array {
   const padding = '='.repeat((4 - (base64Url.length % 4)) % 4);
@@ -152,22 +157,37 @@ export async function resolveZeroTrustIdentity(c: Context<{ Bindings: Env }>): P
   let aud = (c.env.CF_ACCESS_AUD || '').trim();
   const devBypass = (c.env.DEV_BYPASS_AUTH || '').toLowerCase() === 'true';
 
-  // Fall back to in-app D1 settings if Worker environment variables are not set
+  // Fall back to in-app D1 settings if Worker environment variables are not set (cached in memory for 60s)
   if ((!teamDomain || !aud) && c.env.uf_db) {
-    try {
-      const { results } = await c.env.uf_db.prepare(
-        "SELECT key, value FROM settings WHERE key IN ('cf_access_team_domain', 'cf_access_aud')"
-      ).all<{ key: string; value: string }>();
-      for (const row of results || []) {
-        if (row.key === 'cf_access_team_domain' && !teamDomain && row.value.trim()) {
-          teamDomain = row.value.trim();
+    const now = Date.now();
+    if (cachedAccessSettings && cachedAccessSettings.expiresAt > now) {
+      if (!teamDomain) teamDomain = cachedAccessSettings.teamDomain;
+      if (!aud) aud = cachedAccessSettings.aud;
+    } else {
+      try {
+        const { results } = await c.env.uf_db.prepare(
+          "SELECT key, value FROM settings WHERE key IN ('cf_access_team_domain', 'cf_access_aud')"
+        ).all<{ key: string; value: string }>();
+        let dbDomain = '';
+        let dbAud = '';
+        for (const row of results || []) {
+          if (row.key === 'cf_access_team_domain' && row.value.trim()) {
+            dbDomain = row.value.trim();
+          }
+          if (row.key === 'cf_access_aud' && row.value.trim()) {
+            dbAud = row.value.trim();
+          }
         }
-        if (row.key === 'cf_access_aud' && !aud && row.value.trim()) {
-          aud = row.value.trim();
-        }
+        cachedAccessSettings = {
+          teamDomain: dbDomain,
+          aud: dbAud,
+          expiresAt: now + 60 * 1000,
+        };
+        if (!teamDomain) teamDomain = dbDomain;
+        if (!aud) aud = dbAud;
+      } catch {
+        // Ignore if settings table is not yet initialized
       }
-    } catch {
-      // Ignore if settings table is not yet initialized
     }
   }
 

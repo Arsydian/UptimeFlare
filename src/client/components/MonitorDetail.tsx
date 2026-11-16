@@ -56,7 +56,7 @@ export const MonitorDetail: React.FC<MonitorDetailProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [monitor.id, monitor.heartbeats, monitor.last_checked_at, range]);
+  }, [monitor.id, monitor.last_checked_at, range]);
 
   const pushUrl =
     monitor.type === 'push' && monitor.push_token

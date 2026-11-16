@@ -52,8 +52,21 @@ export const PublicStatusPage: React.FC<PublicStatusPageProps> = ({
 
   useEffect(() => {
     loadPublicStatus();
-    const timer = setInterval(loadPublicStatus, 30000);
-    return () => clearInterval(timer);
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadPublicStatus();
+      }
+    }, 30000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadPublicStatus();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, []);
 
   const grouped = useMemo(() => {

@@ -1,6 +1,10 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { requireZeroTrustAuth, resolveZeroTrustIdentity } from './auth';
+import {
+  invalidateAccessSettingsCache,
+  requireZeroTrustAuth,
+  resolveZeroTrustIdentity,
+} from './auth';
 import { executeMonitorCheck } from './checker';
 import { dispatchChannelAlert } from './notifier';
 import { processSingleMonitorCheck, runScheduledChecks } from './scheduler';
@@ -10,6 +14,7 @@ import {
   IncidentRow,
   MonitorRow,
   NotificationChannelRow,
+  ZeroTrustIdentity,
 } from './types';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -18,6 +23,23 @@ app.use('/api/*', cors());
 
 let schemaInitialized = false;
 
+// In-memory Worker caches to minimize D1 rows read
+let cachedSettings: { data: Record<string, string>; expiresAt: number } | null = null;
+let cachedAggregateStats: {
+  map24h: Map<number, { uptime: number; avgLatency: number }>;
+  map30d: Map<number, number>;
+  expiresAt: number;
+} | null = null;
+
+function invalidateSettingsCache(): void {
+  cachedSettings = null;
+  invalidateAccessSettingsCache();
+}
+
+function invalidateAggregateStatsCache(): void {
+  cachedAggregateStats = null;
+}
+
 async function ensureSchema(db: D1Database): Promise<void> {
   if (schemaInitialized) return;
   try {
@@ -25,6 +47,20 @@ async function ensureSchema(db: D1Database): Promise<void> {
       .prepare('SELECT value FROM settings WHERE key = ? LIMIT 1')
       .bind('site_title')
       .first();
+    // Ensure covering indexes exist on existing deployments
+    await db.batch([
+      db.prepare(
+        'CREATE INDEX IF NOT EXISTS idx_heartbeats_monitor_time ON heartbeats(monitor_id, timestamp DESC)'
+      ),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_heartbeats_timestamp ON heartbeats(timestamp)'),
+      db.prepare(
+        'CREATE INDEX IF NOT EXISTS idx_heartbeats_stats ON heartbeats(monitor_id, timestamp, status, latency_ms)'
+      ),
+      db.prepare(
+        'CREATE INDEX IF NOT EXISTS idx_incidents_monitor ON incidents(monitor_id, started_at DESC)'
+      ),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_incidents_started ON incidents(started_at DESC)'),
+    ]);
     schemaInitialized = true;
   } catch {
     // Auto-bootstrap schema if D1 database hasn't had migrations applied yet
@@ -66,7 +102,9 @@ async function ensureSchema(db: D1Database): Promise<void> {
           updated_at INTEGER NOT NULL
         )
       `),
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_monitors_active_checked ON monitors(active, last_checked_at)'),
+      db.prepare(
+        'CREATE INDEX IF NOT EXISTS idx_monitors_active_checked ON monitors(active, last_checked_at)'
+      ),
       db.prepare('CREATE INDEX IF NOT EXISTS idx_monitors_push_token ON monitors(push_token)'),
       db.prepare(`
         CREATE TABLE IF NOT EXISTS heartbeats (
@@ -80,7 +118,13 @@ async function ensureSchema(db: D1Database): Promise<void> {
           FOREIGN KEY (monitor_id) REFERENCES monitors(id) ON DELETE CASCADE
         )
       `),
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_heartbeats_monitor_time ON heartbeats(monitor_id, timestamp DESC)'),
+      db.prepare(
+        'CREATE INDEX IF NOT EXISTS idx_heartbeats_monitor_time ON heartbeats(monitor_id, timestamp DESC)'
+      ),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_heartbeats_timestamp ON heartbeats(timestamp)'),
+      db.prepare(
+        'CREATE INDEX IF NOT EXISTS idx_heartbeats_stats ON heartbeats(monitor_id, timestamp, status, latency_ms)'
+      ),
       db.prepare(`
         CREATE TABLE IF NOT EXISTS incidents (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,6 +135,10 @@ async function ensureSchema(db: D1Database): Promise<void> {
           FOREIGN KEY (monitor_id) REFERENCES monitors(id) ON DELETE CASCADE
         )
       `),
+      db.prepare(
+        'CREATE INDEX IF NOT EXISTS idx_incidents_monitor ON incidents(monitor_id, started_at DESC)'
+      ),
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_incidents_started ON incidents(started_at DESC)'),
       db.prepare(`
         CREATE TABLE IF NOT EXISTS notification_channels (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,7 +179,12 @@ function generatePushToken(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function getSettingsMap(db: D1Database): Promise<Record<string, string>> {
+async function getSettingsMap(db: D1Database, bypassCache = false): Promise<Record<string, string>> {
+  const now = Date.now();
+  if (!bypassCache && cachedSettings && cachedSettings.expiresAt > now) {
+    return cachedSettings.data;
+  }
+
   const { results } = await db
     .prepare('SELECT key, value FROM settings')
     .all<{ key: string; value: string }>();
@@ -148,7 +201,70 @@ async function getSettingsMap(db: D1Database): Promise<Record<string, string>> {
   for (const r of results || []) {
     out[r.key] = r.value;
   }
+
+  cachedSettings = {
+    data: out,
+    expiresAt: now + 60 * 1000, // Cache settings for 60s
+  };
   return out;
+}
+
+async function getAggregateStats(db: D1Database) {
+  const now = Date.now();
+  if (cachedAggregateStats && cachedAggregateStats.expiresAt > now) {
+    return {
+      map24h: cachedAggregateStats.map24h,
+      map30d: cachedAggregateStats.map30d,
+    };
+  }
+
+  const dayAgo = now - 24 * 60 * 60 * 1000;
+  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+
+  // Single combined query using conditional aggregation instead of two separate table scans
+  const { results } = await db
+    .prepare(
+      `SELECT monitor_id,
+              COUNT(*) as total_30d,
+              SUM(CASE WHEN status = 'up' THEN 1 ELSE 0 END) as up_30d,
+              SUM(CASE WHEN timestamp >= ? THEN 1 ELSE 0 END) as total_24h,
+              SUM(CASE WHEN timestamp >= ? AND status = 'up' THEN 1 ELSE 0 END) as up_24h,
+              ROUND(AVG(CASE WHEN timestamp >= ? THEN latency_ms ELSE NULL END)) as avg_latency_24h
+       FROM heartbeats
+       WHERE timestamp >= ?
+       GROUP BY monitor_id`
+    )
+    .bind(dayAgo, dayAgo, dayAgo, thirtyDaysAgo)
+    .all<{
+      monitor_id: number;
+      total_30d: number;
+      up_30d: number;
+      total_24h: number;
+      up_24h: number;
+      avg_latency_24h: number | null;
+    }>();
+
+  const map24h = new Map<number, { uptime: number; avgLatency: number }>();
+  const map30d = new Map<number, number>();
+
+  for (const row of results || []) {
+    const pct30 = row.total_30d > 0 ? Number(((row.up_30d / row.total_30d) * 100).toFixed(2)) : 100;
+    map30d.set(row.monitor_id, pct30);
+
+    const pct24 = row.total_24h > 0 ? Number(((row.up_24h / row.total_24h) * 100).toFixed(2)) : 100;
+    map24h.set(row.monitor_id, {
+      uptime: pct24,
+      avgLatency: row.avg_latency_24h || 0,
+    });
+  }
+
+  cachedAggregateStats = {
+    map24h,
+    map30d,
+    expiresAt: now + 5 * 60 * 1000, // Cache 24h & 30d percentages for 5 minutes
+  };
+
+  return { map24h, map30d };
 }
 
 async function enrichMonitorsWithTelemetry(
@@ -157,69 +273,33 @@ async function enrichMonitorsWithTelemetry(
   sanitizeForPublic = false
 ) {
   if (monitors.length === 0) return [];
-  const now = Date.now();
-  const dayAgo = now - 24 * 60 * 60 * 1000;
-  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
 
-  // Compute 24h and 30d aggregates for all monitors in two fast grouped queries
-  const [stats24hRes, stats30dRes] = await Promise.all([
+  // 1. Fetch cached 24h & 30d aggregate stats (computed at most once every 5 minutes)
+  // 2. Fetch recent 60 heartbeats per monitor via indexed LIMIT 60 queries in a single D1 batch
+  //    (Uses idx_heartbeats_monitor_time so SQLite reads at most 60 rows per monitor instead of scanning the table!)
+  const beatQueries = monitors.map((m) =>
     db
       .prepare(
-        `SELECT monitor_id,
-                COUNT(*) as total,
-                SUM(CASE WHEN status = 'up' THEN 1 ELSE 0 END) as up_count,
-                ROUND(AVG(latency_ms)) as avg_latency
+        `SELECT id, monitor_id, status, latency_ms, status_code, message, timestamp
          FROM heartbeats
-         WHERE timestamp >= ?
-         GROUP BY monitor_id`
+         WHERE monitor_id = ?
+         ORDER BY timestamp DESC
+         LIMIT 60`
       )
-      .bind(dayAgo)
-      .all<{ monitor_id: number; total: number; up_count: number; avg_latency: number }>(),
-    db
-      .prepare(
-        `SELECT monitor_id,
-                COUNT(*) as total,
-                SUM(CASE WHEN status = 'up' THEN 1 ELSE 0 END) as up_count
-         FROM heartbeats
-         WHERE timestamp >= ?
-         GROUP BY monitor_id`
-      )
-      .bind(thirtyDaysAgo)
-      .all<{ monitor_id: number; total: number; up_count: number }>(),
+      .bind(m.id)
+  );
+
+  const [{ map24h, map30d }, batchResults] = await Promise.all([
+    getAggregateStats(db),
+    db.batch<HeartbeatRow>(beatQueries),
   ]);
 
-  const map24h = new Map<number, { uptime: number; avgLatency: number }>();
-  for (const row of stats24hRes.results || []) {
-    const pct = row.total > 0 ? Number(((row.up_count / row.total) * 100).toFixed(2)) : 100;
-    map24h.set(row.monitor_id, { uptime: pct, avgLatency: row.avg_latency || 0 });
-  }
-
-  const map30d = new Map<number, number>();
-  for (const row of stats30dRes.results || []) {
-    const pct = row.total > 0 ? Number(((row.up_count / row.total) * 100).toFixed(2)) : 100;
-    map30d.set(row.monitor_id, pct);
-  }
-
-  // Fetch recent 60 heartbeats per monitor using a window function
-  const { results: recentBeats } = await db
-    .prepare(
-      `SELECT id, monitor_id, status, latency_ms, status_code, message, timestamp
-       FROM (
-         SELECT id, monitor_id, status, latency_ms, status_code, message, timestamp,
-                ROW_NUMBER() OVER (PARTITION BY monitor_id ORDER BY timestamp DESC) as rn
-         FROM heartbeats
-       )
-       WHERE rn <= 60
-       ORDER BY monitor_id ASC, timestamp ASC`
-    )
-    .all<HeartbeatRow>();
-
   const beatsByMonitor = new Map<number, HeartbeatRow[]>();
-  for (const beat of recentBeats || []) {
-    const arr = beatsByMonitor.get(beat.monitor_id) || [];
-    arr.push(beat);
-    beatsByMonitor.set(beat.monitor_id, arr);
-  }
+  monitors.forEach((m, idx) => {
+    const rows = batchResults[idx]?.results || [];
+    // Reverse to chronological ascending order for heartbeat bars & charts
+    beatsByMonitor.set(m.id, rows.slice().reverse());
+  });
 
   return monitors.map((m) => {
     const s24 = map24h.get(m.id);
@@ -354,6 +434,7 @@ app.all('/api/push/:token', async (c) => {
     },
     c.env.EMAIL
   );
+  invalidateAggregateStatsCache();
 
   return c.json({
     ok: true,
@@ -389,12 +470,18 @@ app.use('/api/*', async (c, next) => {
 });
 
 app.get('/api/auth/me', async (c) => {
-  const identity = await resolveZeroTrustIdentity(c);
+  const identity =
+    (c.get('identity' as never) as ZeroTrustIdentity | undefined) ||
+    (await resolveZeroTrustIdentity(c));
   return c.json(identity);
 });
 
 app.get('/api/dashboard', async (c) => {
-  const [monitorsRes, incidentsRes, settings, channelsRes, identity] = await Promise.all([
+  const identity =
+    (c.get('identity' as never) as ZeroTrustIdentity | undefined) ||
+    (await resolveZeroTrustIdentity(c));
+
+  const [monitorsRes, incidentsRes, settings, channelsRes] = await Promise.all([
     c.env.uf_db.prepare('SELECT * FROM monitors ORDER BY group_name ASC, name ASC').all<MonitorRow>(),
     c.env.uf_db.prepare(
       `SELECT i.*, m.name as monitor_name
@@ -405,7 +492,6 @@ app.get('/api/dashboard', async (c) => {
     ).all<IncidentRow>(),
     getSettingsMap(c.env.uf_db),
     c.env.uf_db.prepare('SELECT * FROM notification_channels ORDER BY id ASC').all<NotificationChannelRow>(),
-    resolveZeroTrustIdentity(c),
   ]);
 
   const enrichedMonitors = await enrichMonitorsWithTelemetry(
@@ -601,6 +687,7 @@ app.post('/api/monitors', async (c) => {
   if (createdMonitor && createdMonitor.active === 1 && createdMonitor.type !== 'push') {
     await processSingleMonitorCheck(c.env.uf_db, createdMonitor, undefined, c.env.EMAIL);
   }
+  invalidateAggregateStatsCache();
 
   const updated = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE id = ?')
     .bind(newId)
@@ -728,6 +815,7 @@ app.patch('/api/monitors/:id/toggle', async (c) => {
 
   if (refreshed && nextActive === 1 && refreshed.type !== 'push') {
     await processSingleMonitorCheck(c.env.uf_db, refreshed, undefined, c.env.EMAIL);
+    invalidateAggregateStatsCache();
   }
 
   const finalRow = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE id = ?')
@@ -748,6 +836,7 @@ app.post('/api/monitors/:id/check', async (c) => {
   }
 
   const outcome = await processSingleMonitorCheck(c.env.uf_db, monitor, undefined, c.env.EMAIL);
+  invalidateAggregateStatsCache();
   const updated = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE id = ?')
     .bind(id)
     .first<MonitorRow>();
@@ -766,6 +855,7 @@ app.delete('/api/monitors/:id', async (c) => {
     c.env.uf_db.prepare('DELETE FROM incidents WHERE monitor_id = ?').bind(id),
     c.env.uf_db.prepare('DELETE FROM monitors WHERE id = ?').bind(id),
   ]);
+  invalidateAggregateStatsCache();
   return c.json({ deleted: true, id });
 });
 
@@ -912,9 +1002,10 @@ app.put('/api/settings', async (c) => {
   }
   if (statements.length > 0) {
     await c.env.uf_db.batch(statements);
+    invalidateSettingsCache();
   }
 
-  const updated = await getSettingsMap(c.env.uf_db);
+  const updated = await getSettingsMap(c.env.uf_db, true);
   return c.json({ settings: updated });
 });
 
@@ -952,7 +1043,10 @@ app.post('/api/backup/import', async (c) => {
         String(v)
       )
     );
-    if (stmts.length > 0) await c.env.uf_db.batch(stmts);
+    if (stmts.length > 0) {
+      await c.env.uf_db.batch(stmts);
+      invalidateSettingsCache();
+    }
   }
 
   if (Array.isArray(payload.notification_channels)) {
@@ -1023,6 +1117,7 @@ app.post('/api/backup/import', async (c) => {
         .run();
       importedMonitors++;
     }
+    invalidateAggregateStatsCache();
   }
 
   return c.json({
@@ -1037,6 +1132,7 @@ app.post('/api/cron/run', async (c) => {
     forceAll: true,
     emailBinding: c.env.EMAIL,
   });
+  invalidateAggregateStatsCache();
   return c.json(summary);
 });
 
@@ -1055,7 +1151,10 @@ export default {
     ctx.waitUntil(
       (async () => {
         await ensureSchema(env.uf_db);
-        await runScheduledChecks(env.uf_db, { emailBinding: env.EMAIL });
+        const summary = await runScheduledChecks(env.uf_db, { emailBinding: env.EMAIL });
+        if (summary.checkedCount > 0) {
+          invalidateAggregateStatsCache();
+        }
       })()
     );
   },
