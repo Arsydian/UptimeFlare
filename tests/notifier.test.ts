@@ -8,7 +8,7 @@ function makeAlert(overrides?: Partial<AlertEvent['monitor']>): AlertEvent {
       id: 42,
       name: 'Core API <prod> & Edge',
       type: 'http',
-      url_or_host: 'https://api.phnxlabs.dev/health',
+      url_or_host: 'https://api.example.com/health',
       group_name: 'Production & Core',
       ...overrides,
     },
@@ -37,14 +37,14 @@ function makePostletChannel(config: Record<string, string>): NotificationChannel
 
 describe('Postlet Notification Provider & Service Auth', () => {
   it('normalizes Postlet base URLs cleanly', () => {
-    expect(normalizePostletSendUrl('https://mail.phnxlabs.dev/')).toBe(
-      'https://mail.phnxlabs.dev/api/v1/messages/send'
+    expect(normalizePostletSendUrl('https://mail.example.com/')).toBe(
+      'https://mail.example.com/api/v1/messages/send'
     );
-    expect(normalizePostletSendUrl('https://mail.phnxlabs.dev/api/v1/')).toBe(
-      'https://mail.phnxlabs.dev/api/v1/messages/send'
+    expect(normalizePostletSendUrl('https://mail.example.com/api/v1/')).toBe(
+      'https://mail.example.com/api/v1/messages/send'
     );
-    expect(normalizePostletSendUrl('https://mail.phnxlabs.dev/api/v1/messages/send')).toBe(
-      'https://mail.phnxlabs.dev/api/v1/messages/send'
+    expect(normalizePostletSendUrl('https://mail.example.com/api/v1/messages/send')).toBe(
+      'https://mail.example.com/api/v1/messages/send'
     );
   });
 
@@ -59,16 +59,16 @@ describe('Postlet Notification Provider & Service Auth', () => {
     };
 
     const channel = makePostletChannel({
-      to_email: 'Ops <ops@phnxlabs.dev>, admin@example.org',
+      to_email: 'Ops <ops@example.com>, admin@example.org',
     });
 
     const outcome = await dispatchChannelAlert(
       channel,
       makeAlert(),
       {
-        POSTLET_API_URL: 'https://mail.phnxlabs.dev/',
+        POSTLET_API_URL: 'https://mail.example.com/',
         POSTLET_API_KEY: 'plt_worker_secret_123456',
-        POSTLET_FROM_EMAIL: 'UptimeFlare Alerts <uptime@phnxlabs.dev>',
+        POSTLET_FROM_EMAIL: 'UptimeFlare Alerts <uptime@example.com>',
         CF_ACCESS_CLIENT_ID: 'svc-client-id.access',
         CF_ACCESS_CLIENT_SECRET: 'svc-client-secret-xyz',
         POSTLET_SERVICE_AUTH_SECRET: 'shared-hmac-secret',
@@ -78,7 +78,7 @@ describe('Postlet Notification Provider & Service Auth', () => {
 
     expect(outcome).toEqual({ ok: true });
     expect(calls).toHaveLength(1);
-    expect(calls[0].url).toBe('https://mail.phnxlabs.dev/api/v1/messages/send');
+    expect(calls[0].url).toBe('https://mail.example.com/api/v1/messages/send');
     expect(calls[0].init?.method).toBe('POST');
     expect(calls[0].init?.redirect).toBe('manual');
 
@@ -95,8 +95,8 @@ describe('Postlet Notification Provider & Service Auth', () => {
       textBody: string;
       htmlBody: string;
     };
-    expect(body.fromAddress).toBe('uptime@phnxlabs.dev');
-    expect(body.to).toEqual(['ops@phnxlabs.dev', 'admin@example.org']);
+    expect(body.fromAddress).toBe('uptime@example.com');
+    expect(body.to).toEqual(['ops@example.com', 'admin@example.org']);
     expect(body.subject).toContain('[UptimeFlare]');
     expect(body.subject).toContain('Core API <prod> & Edge');
     expect(body.textBody).toContain('MONITOR DOWN');
@@ -124,7 +124,7 @@ describe('Postlet Notification Provider & Service Auth', () => {
       channel,
       makeAlert(),
       {
-        POSTLET_API_URL: 'https://mail.phnxlabs.dev',
+        POSTLET_API_URL: 'https://mail.example.com',
         POSTLET_API_KEY: 'plt_env_key',
         POSTLET_CF_ACCESS_CLIENT_ID: 'env-id.access',
         POSTLET_CF_ACCESS_CLIENT_SECRET: 'env-secret',
@@ -145,7 +145,7 @@ describe('Postlet Notification Provider & Service Auth', () => {
   it('surfaces actionable diagnostics for Cloudflare Access redirects, HTML responses, and API JSON errors', async () => {
     const channel = makePostletChannel({ to_email: 'ops@example.org' });
     const envCfg = {
-      POSTLET_API_URL: 'https://mail.phnxlabs.dev',
+      POSTLET_API_URL: 'https://mail.example.com',
       POSTLET_API_KEY: 'plt_key',
     };
 
@@ -210,7 +210,7 @@ describe('Postlet Notification Provider & Service Auth', () => {
     const missingKey = await dispatchChannelAlert(
       makePostletChannel({ to_email: 'ops@example.org' }),
       makeAlert(),
-      { POSTLET_API_URL: 'https://mail.phnxlabs.dev' },
+      { POSTLET_API_URL: 'https://mail.example.com' },
       noFetch
     );
     expect(missingKey.ok).toBe(false);
@@ -219,7 +219,7 @@ describe('Postlet Notification Provider & Service Auth', () => {
     const missingTo = await dispatchChannelAlert(
       makePostletChannel({}),
       makeAlert(),
-      { POSTLET_API_URL: 'https://mail.phnxlabs.dev', POSTLET_API_KEY: 'plt_k' },
+      { POSTLET_API_URL: 'https://mail.example.com', POSTLET_API_KEY: 'plt_k' },
       noFetch
     );
     expect(missingTo.ok).toBe(false);

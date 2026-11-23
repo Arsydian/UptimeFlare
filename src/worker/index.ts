@@ -1027,7 +1027,7 @@ app.get('/api/backup/export', async (c) => {
   ]);
 
   return c.json({
-    version: '1.1.0',
+    version: '1.1.1',
     exported_at: new Date().toISOString(),
     settings,
     monitors: monitors.results || [],

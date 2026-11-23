@@ -606,7 +606,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         placeholder={
                           postletEnv?.api_url
                             ? 'Using POSTLET_API_URL Worker secret'
-                            : 'https://mail.phnxlabs.dev'
+                            : 'https://mail.example.com'
                         }
                         value={postletUrl}
                         onChange={(e) => setPostletUrl(e.target.value)}
@@ -638,7 +638,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         placeholder={
                           postletEnv?.from_email
                             ? 'Using POSTLET_FROM_EMAIL Worker secret'
-                            : 'uptime@phnxlabs.dev'
+                            : 'uptime@example.com'
                         }
                         value={fromEmail}
                         onChange={(e) => setFromEmail(e.target.value)}

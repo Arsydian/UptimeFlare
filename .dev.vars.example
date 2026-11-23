@@ -4,9 +4,9 @@ CF_ACCESS_TEAM_DOMAIN=
 CF_ACCESS_AUD=
 
 # Recommended: Postlet platform-independent email notification secrets
-# POSTLET_API_URL=https://mail.phnxlabs.dev
+# POSTLET_API_URL=https://mail.example.com
 # POSTLET_API_KEY=plt_xxxxxxxxxxxxxxxxxxxxxxxxx
-# POSTLET_FROM_EMAIL=uptime@phnxlabs.dev
+# POSTLET_FROM_EMAIL=uptime@example.com
 # POSTLET_CF_ACCESS_CLIENT_ID=your-service-token-id.access
 # POSTLET_CF_ACCESS_CLIENT_SECRET=your-service-token-secret
 # POSTLET_SERVICE_AUTH_SECRET=replace-with-shared-service-secret
