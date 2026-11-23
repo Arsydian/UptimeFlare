@@ -42,7 +42,12 @@ export async function processSingleMonitorCheck(
     }
   }
 
-  // Batch heartbeat insert + monitor state update in a single D1 round-trip
+  const hourBucket = Math.floor(now / 3600000) * 3600000;
+  const upInc = heartbeatStatus === 'up' ? 1 : 0;
+  const downInc = heartbeatStatus === 'down' ? 1 : 0;
+  const degradedInc = heartbeatStatus === 'degraded' ? 1 : 0;
+
+  // Batch heartbeat insert + hourly rollup upsert + monitor state update in a single D1 round-trip
   await db.batch([
     db
       .prepare(
@@ -57,6 +62,18 @@ export async function processSingleMonitorCheck(
         result.message,
         now
       ),
+    db
+      .prepare(
+        `INSERT INTO heartbeat_hourly (monitor_id, hour_bucket, total_count, up_count, down_count, degraded_count, latency_sum)
+         VALUES (?, ?, 1, ?, ?, ?, ?)
+         ON CONFLICT(monitor_id, hour_bucket) DO UPDATE SET
+           total_count = total_count + 1,
+           up_count = up_count + excluded.up_count,
+           down_count = down_count + excluded.down_count,
+           degraded_count = degraded_count + excluded.degraded_count,
+           latency_sum = latency_sum + excluded.latency_sum`
+      )
+      .bind(monitor.id, hourBucket, upInc, downInc, degradedInc, result.latency_ms),
     db
       .prepare(
         `UPDATE monitors
@@ -195,9 +212,11 @@ async function maybeRunRetentionCleanup(db: D1Database, now: number): Promise<vo
   lastCleanupCheckAt = now;
   const retentionDays = Math.max(1, Number(map.get('retention_days') || '30'));
   const cutoffTime = now - retentionDays * 24 * 60 * 60 * 1000;
+  const hourlyCutoff = Math.floor(cutoffTime / 3600000) * 3600000;
 
   await db.batch([
     db.prepare('DELETE FROM heartbeats WHERE timestamp < ?').bind(cutoffTime),
+    db.prepare('DELETE FROM heartbeat_hourly WHERE hour_bucket < ?').bind(hourlyCutoff),
     db
       .prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('last_cleanup_at', ?)")
       .bind(String(now)),

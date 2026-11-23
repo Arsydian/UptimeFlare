@@ -81,7 +81,7 @@ export const App: React.FC = () => {
       if (document.visibilityState === 'visible') {
         fetchDashboard();
       }
-    }, 30000);
+    }, 60000);
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         fetchDashboard();

@@ -47,7 +47,7 @@ async function ensureSchema(db: D1Database): Promise<void> {
       .prepare('SELECT value FROM settings WHERE key = ? LIMIT 1')
       .bind('site_title')
       .first();
-    // Ensure covering indexes exist on existing deployments
+    // Ensure covering indexes and hourly rollup table exist on existing deployments
     await db.batch([
       db.prepare(
         'CREATE INDEX IF NOT EXISTS idx_heartbeats_monitor_time ON heartbeats(monitor_id, timestamp DESC)'
@@ -60,7 +60,51 @@ async function ensureSchema(db: D1Database): Promise<void> {
         'CREATE INDEX IF NOT EXISTS idx_incidents_monitor ON incidents(monitor_id, started_at DESC)'
       ),
       db.prepare('CREATE INDEX IF NOT EXISTS idx_incidents_started ON incidents(started_at DESC)'),
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS heartbeat_hourly (
+          monitor_id INTEGER NOT NULL,
+          hour_bucket INTEGER NOT NULL,
+          total_count INTEGER NOT NULL DEFAULT 0,
+          up_count INTEGER NOT NULL DEFAULT 0,
+          down_count INTEGER NOT NULL DEFAULT 0,
+          degraded_count INTEGER NOT NULL DEFAULT 0,
+          latency_sum INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (monitor_id, hour_bucket),
+          FOREIGN KEY (monitor_id) REFERENCES monitors(id) ON DELETE CASCADE
+        )
+      `),
+      db.prepare(
+        'CREATE INDEX IF NOT EXISTS idx_heartbeat_hourly_bucket ON heartbeat_hourly(hour_bucket)'
+      ),
     ]);
+
+    // One-time backfill of heartbeat_hourly from the last 30 days of heartbeats if empty
+    const hasHourly = await db
+      .prepare('SELECT 1 AS ok FROM heartbeat_hourly LIMIT 1')
+      .first<{ ok: number }>();
+    if (!hasHourly) {
+      const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      await db
+        .prepare(
+          `INSERT OR IGNORE INTO heartbeat_hourly (
+             monitor_id, hour_bucket, total_count, up_count, down_count, degraded_count, latency_sum
+           )
+           SELECT
+             monitor_id,
+             CAST(timestamp / 3600000 AS INTEGER) * 3600000 AS hour_bucket,
+             COUNT(*) AS total_count,
+             SUM(CASE WHEN status = 'up' THEN 1 ELSE 0 END) AS up_count,
+             SUM(CASE WHEN status = 'down' THEN 1 ELSE 0 END) AS down_count,
+             SUM(CASE WHEN status = 'degraded' THEN 1 ELSE 0 END) AS degraded_count,
+             SUM(latency_ms) AS latency_sum
+           FROM heartbeats
+           WHERE timestamp >= ?
+           GROUP BY monitor_id, hour_bucket`
+        )
+        .bind(thirtyDaysAgo)
+        .run();
+    }
+
     schemaInitialized = true;
   } catch {
     // Auto-bootstrap schema if D1 database hasn't had migrations applied yet
@@ -124,6 +168,22 @@ async function ensureSchema(db: D1Database): Promise<void> {
       db.prepare('CREATE INDEX IF NOT EXISTS idx_heartbeats_timestamp ON heartbeats(timestamp)'),
       db.prepare(
         'CREATE INDEX IF NOT EXISTS idx_heartbeats_stats ON heartbeats(monitor_id, timestamp, status, latency_ms)'
+      ),
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS heartbeat_hourly (
+          monitor_id INTEGER NOT NULL,
+          hour_bucket INTEGER NOT NULL,
+          total_count INTEGER NOT NULL DEFAULT 0,
+          up_count INTEGER NOT NULL DEFAULT 0,
+          down_count INTEGER NOT NULL DEFAULT 0,
+          degraded_count INTEGER NOT NULL DEFAULT 0,
+          latency_sum INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (monitor_id, hour_bucket),
+          FOREIGN KEY (monitor_id) REFERENCES monitors(id) ON DELETE CASCADE
+        )
+      `),
+      db.prepare(
+        'CREATE INDEX IF NOT EXISTS idx_heartbeat_hourly_bucket ON heartbeat_hourly(hour_bucket)'
       ),
       db.prepare(`
         CREATE TABLE IF NOT EXISTS incidents (
@@ -218,30 +278,30 @@ async function getAggregateStats(db: D1Database) {
     };
   }
 
-  const dayAgo = now - 24 * 60 * 60 * 1000;
-  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+  const dayAgoBucket = Math.floor((now - 24 * 60 * 60 * 1000) / 3600000) * 3600000;
+  const thirtyDaysAgoBucket = Math.floor((now - 30 * 24 * 60 * 60 * 1000) / 3600000) * 3600000;
 
-  // Single combined query using conditional aggregation instead of two separate table scans
+  // Query pre-aggregated hourly rollups (max 720 rows/monitor for 30d instead of 43,200+ raw heartbeats)
   const { results } = await db
     .prepare(
       `SELECT monitor_id,
-              COUNT(*) as total_30d,
-              SUM(CASE WHEN status = 'up' THEN 1 ELSE 0 END) as up_30d,
-              SUM(CASE WHEN timestamp >= ? THEN 1 ELSE 0 END) as total_24h,
-              SUM(CASE WHEN timestamp >= ? AND status = 'up' THEN 1 ELSE 0 END) as up_24h,
-              ROUND(AVG(CASE WHEN timestamp >= ? THEN latency_ms ELSE NULL END)) as avg_latency_24h
-       FROM heartbeats
-       WHERE timestamp >= ?
+              SUM(total_count) as total_30d,
+              SUM(up_count) as up_30d,
+              SUM(CASE WHEN hour_bucket >= ? THEN total_count ELSE 0 END) as total_24h,
+              SUM(CASE WHEN hour_bucket >= ? THEN up_count ELSE 0 END) as up_24h,
+              SUM(CASE WHEN hour_bucket >= ? THEN latency_sum ELSE 0 END) as latency_sum_24h
+       FROM heartbeat_hourly
+       WHERE hour_bucket >= ?
        GROUP BY monitor_id`
     )
-    .bind(dayAgo, dayAgo, dayAgo, thirtyDaysAgo)
+    .bind(dayAgoBucket, dayAgoBucket, dayAgoBucket, thirtyDaysAgoBucket)
     .all<{
       monitor_id: number;
       total_30d: number;
       up_30d: number;
       total_24h: number;
       up_24h: number;
-      avg_latency_24h: number | null;
+      latency_sum_24h: number;
     }>();
 
   const map24h = new Map<number, { uptime: number; avgLatency: number }>();
@@ -252,16 +312,17 @@ async function getAggregateStats(db: D1Database) {
     map30d.set(row.monitor_id, pct30);
 
     const pct24 = row.total_24h > 0 ? Number(((row.up_24h / row.total_24h) * 100).toFixed(2)) : 100;
+    const avgLatency24h = row.total_24h > 0 ? Math.round(row.latency_sum_24h / row.total_24h) : 0;
     map24h.set(row.monitor_id, {
       uptime: pct24,
-      avgLatency: row.avg_latency_24h || 0,
+      avgLatency: avgLatency24h,
     });
   }
 
   cachedAggregateStats = {
     map24h,
     map30d,
-    expiresAt: now + 5 * 60 * 1000, // Cache 24h & 30d percentages for 5 minutes
+    expiresAt: now + 10 * 60 * 1000, // Cache 24h & 30d percentages for 10 minutes
   };
 
   return { map24h, map30d };
@@ -537,11 +598,69 @@ app.get('/api/monitors/:id/history', async (c) => {
   const id = Number(c.req.param('id'));
   const range = c.req.query('range') === '7d' ? '7d' : '24h';
   const now = Date.now();
-  const windowMs = range === '7d' ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
-  const cutoff = now - windowMs;
-  // Bucket to span the entire requested window (~288 points for 24h, ~336 points for 7d)
-  // while reading strictly from the idx_heartbeats_stats covering index.
-  const bucketMs = range === '7d' ? 30 * 60 * 1000 : 5 * 60 * 1000;
+
+  if (range === '7d') {
+    // Query pre-aggregated hourly rollups: at most 168 rows read for a full 7-day window
+    const cutoffBucket = Math.floor((now - 7 * 24 * 60 * 60 * 1000) / 3600000) * 3600000;
+    const [hourlyRes, incidentsRes] = await Promise.all([
+      c.env.uf_db.prepare(
+        `SELECT hour_bucket, total_count, up_count, down_count, degraded_count, latency_sum
+         FROM heartbeat_hourly
+         WHERE monitor_id = ? AND hour_bucket >= ?
+         ORDER BY hour_bucket ASC`
+      )
+        .bind(id, cutoffBucket)
+        .all<{
+          hour_bucket: number;
+          total_count: number;
+          up_count: number;
+          down_count: number;
+          degraded_count: number;
+          latency_sum: number;
+        }>(),
+      c.env.uf_db.prepare(
+        `SELECT * FROM incidents WHERE monitor_id = ? ORDER BY started_at DESC LIMIT 30`
+      )
+        .bind(id)
+        .all<IncidentRow>(),
+    ]);
+
+    const heartbeats: HeartbeatRow[] = (hourlyRes.results || []).map((row) => {
+      const totalCount = Number(row.total_count) || 1;
+      const downCount = Number(row.down_count) || 0;
+      const degradedCount = Number(row.degraded_count) || 0;
+      const avgLatency = Math.round((Number(row.latency_sum) || 0) / totalCount);
+      const status: HeartbeatRow['status'] =
+        downCount > 0 ? 'down' : degradedCount > 0 ? 'degraded' : 'up';
+      const message =
+        downCount > 0
+          ? `${downCount}/${totalCount} checks down`
+          : degradedCount > 0
+            ? `${degradedCount}/${totalCount} checks degraded`
+            : totalCount > 1
+              ? `OK (${totalCount} checks avg)`
+              : 'OK';
+
+      return {
+        id: Number(row.hour_bucket),
+        monitor_id: id,
+        status,
+        latency_ms: avgLatency,
+        status_code: downCount > 0 ? 500 : 200,
+        message,
+        timestamp: Number(row.hour_bucket),
+      };
+    });
+
+    return c.json({
+      heartbeats,
+      incidents: incidentsRes.results || [],
+    });
+  }
+
+  // 24h view: 5-minute buckets covering the full 24h window via idx_heartbeats_stats covering index
+  const cutoff = now - 24 * 60 * 60 * 1000;
+  const bucketMs = 5 * 60 * 1000;
 
   const [beatsRes, incidentsRes] = await Promise.all([
     c.env.uf_db.prepare(
@@ -904,6 +1023,7 @@ app.delete('/api/monitors/:id', async (c) => {
   const id = Number(c.req.param('id'));
   await c.env.uf_db.batch([
     c.env.uf_db.prepare('DELETE FROM heartbeats WHERE monitor_id = ?').bind(id),
+    c.env.uf_db.prepare('DELETE FROM heartbeat_hourly WHERE monitor_id = ?').bind(id),
     c.env.uf_db.prepare('DELETE FROM incidents WHERE monitor_id = ?').bind(id),
     c.env.uf_db.prepare('DELETE FROM monitors WHERE id = ?').bind(id),
   ]);
@@ -1203,10 +1323,7 @@ export default {
     ctx.waitUntil(
       (async () => {
         await ensureSchema(env.uf_db);
-        const summary = await runScheduledChecks(env.uf_db, { notifierEnv: env });
-        if (summary.checkedCount > 0) {
-          invalidateAggregateStatsCache();
-        }
+        await runScheduledChecks(env.uf_db, { notifierEnv: env });
       })()
     );
   },

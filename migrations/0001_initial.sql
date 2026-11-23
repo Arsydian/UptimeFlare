@@ -54,6 +54,20 @@ CREATE INDEX IF NOT EXISTS idx_heartbeats_monitor_time ON heartbeats(monitor_id,
 CREATE INDEX IF NOT EXISTS idx_heartbeats_timestamp ON heartbeats(timestamp);
 CREATE INDEX IF NOT EXISTS idx_heartbeats_stats ON heartbeats(monitor_id, timestamp, status, latency_ms);
 
+CREATE TABLE IF NOT EXISTS heartbeat_hourly (
+  monitor_id INTEGER NOT NULL,
+  hour_bucket INTEGER NOT NULL,
+  total_count INTEGER NOT NULL DEFAULT 0,
+  up_count INTEGER NOT NULL DEFAULT 0,
+  down_count INTEGER NOT NULL DEFAULT 0,
+  degraded_count INTEGER NOT NULL DEFAULT 0,
+  latency_sum INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (monitor_id, hour_bucket),
+  FOREIGN KEY (monitor_id) REFERENCES monitors(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_heartbeat_hourly_bucket ON heartbeat_hourly(hour_bucket);
+
 CREATE TABLE IF NOT EXISTS incidents (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   monitor_id INTEGER NOT NULL,
