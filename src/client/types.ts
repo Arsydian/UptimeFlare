@@ -1,6 +1,7 @@
 export type MonitorType = 'http' | 'keyword' | 'json-query' | 'tcp' | 'dns' | 'push';
 export type MonitorStatus = 'up' | 'down' | 'degraded' | 'paused' | 'pending';
 export type NotificationProvider =
+  | 'postlet'
   | 'cf-email'
   | 'smtp'
   | 'email'
@@ -99,11 +100,20 @@ export interface SiteSettings {
   cf_access_aud?: string;
 }
 
+export interface PostletEnvStatus {
+  api_url: boolean;
+  api_key: boolean;
+  from_email: boolean;
+  cf_service_auth: boolean;
+  service_auth_secret: boolean;
+}
+
 export interface DashboardPayload {
   identity: ZeroTrustIdentity;
   settings: SiteSettings;
   monitors: Monitor[];
   incidents: Incident[];
   notifications: NotificationChannel[];
+  postlet_env?: PostletEnvStatus;
   server_time: number;
 }

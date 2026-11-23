@@ -1,6 +1,7 @@
 export type MonitorType = 'http' | 'keyword' | 'json-query' | 'tcp' | 'dns' | 'push';
 export type MonitorStatus = 'up' | 'down' | 'degraded' | 'paused' | 'pending';
 export type NotificationProvider =
+  | 'postlet'
   | 'cf-email'
   | 'smtp'
   | 'email'
@@ -11,6 +12,14 @@ export type NotificationProvider =
   | 'pushover'
   | 'webhook';
 
+export interface PostletEnvStatus {
+  api_url: boolean;
+  api_key: boolean;
+  from_email: boolean;
+  cf_service_auth: boolean;
+  service_auth_secret: boolean;
+}
+
 export interface Env {
   uf_db: D1Database;
   EMAIL?: SendEmail;
@@ -18,6 +27,14 @@ export interface Env {
   CF_ACCESS_TEAM_DOMAIN?: string;
   CF_ACCESS_AUD?: string;
   DEV_BYPASS_AUTH?: string;
+  POSTLET_API_URL?: string;
+  POSTLET_API_KEY?: string;
+  POSTLET_FROM_EMAIL?: string;
+  POSTLET_CF_ACCESS_CLIENT_ID?: string;
+  POSTLET_CF_ACCESS_CLIENT_SECRET?: string;
+  CF_ACCESS_CLIENT_ID?: string;
+  CF_ACCESS_CLIENT_SECRET?: string;
+  POSTLET_SERVICE_AUTH_SECRET?: string;
 }
 
 export interface MonitorRow {

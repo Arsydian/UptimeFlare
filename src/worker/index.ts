@@ -432,7 +432,7 @@ app.all('/api/push/:token', async (c) => {
       status_code: statusParam === 'down' ? 500 : 200,
       message: msgParam,
     },
-    c.env.EMAIL
+    c.env
   );
   invalidateAggregateStatsCache();
 
@@ -519,6 +519,16 @@ app.get('/api/dashboard', async (c) => {
     monitors: enrichedMonitors,
     incidents: incidentsRes.results || [],
     notifications: channels,
+    postlet_env: {
+      api_url: Boolean(c.env.POSTLET_API_URL?.trim()),
+      api_key: Boolean(c.env.POSTLET_API_KEY?.trim()),
+      from_email: Boolean(c.env.POSTLET_FROM_EMAIL?.trim()),
+      cf_service_auth: Boolean(
+        (c.env.POSTLET_CF_ACCESS_CLIENT_ID || c.env.CF_ACCESS_CLIENT_ID)?.trim() &&
+          (c.env.POSTLET_CF_ACCESS_CLIENT_SECRET || c.env.CF_ACCESS_CLIENT_SECRET)?.trim()
+      ),
+      service_auth_secret: Boolean(c.env.POSTLET_SERVICE_AUTH_SECRET?.trim()),
+    },
     server_time: Date.now(),
   });
 });
@@ -685,7 +695,7 @@ app.post('/api/monitors', async (c) => {
 
   // Trigger an immediate initial check for active non-push monitors
   if (createdMonitor && createdMonitor.active === 1 && createdMonitor.type !== 'push') {
-    await processSingleMonitorCheck(c.env.uf_db, createdMonitor, undefined, c.env.EMAIL);
+    await processSingleMonitorCheck(c.env.uf_db, createdMonitor, undefined, c.env);
   }
   invalidateAggregateStatsCache();
 
@@ -814,7 +824,7 @@ app.patch('/api/monitors/:id/toggle', async (c) => {
     .first<MonitorRow>();
 
   if (refreshed && nextActive === 1 && refreshed.type !== 'push') {
-    await processSingleMonitorCheck(c.env.uf_db, refreshed, undefined, c.env.EMAIL);
+    await processSingleMonitorCheck(c.env.uf_db, refreshed, undefined, c.env);
     invalidateAggregateStatsCache();
   }
 
@@ -835,7 +845,7 @@ app.post('/api/monitors/:id/check', async (c) => {
     return c.json({ error: 'Monitor not found' }, 404);
   }
 
-  const outcome = await processSingleMonitorCheck(c.env.uf_db, monitor, undefined, c.env.EMAIL);
+  const outcome = await processSingleMonitorCheck(c.env.uf_db, monitor, undefined, c.env);
   invalidateAggregateStatsCache();
   const updated = await c.env.uf_db.prepare('SELECT * FROM monitors WHERE id = ?')
     .bind(id)
@@ -963,7 +973,7 @@ app.post('/api/notifications/test', async (c) => {
       },
       timestamp: Date.now(),
     },
-    c.env.EMAIL
+    c.env
   );
 
   if (!result.ok) {
@@ -1017,7 +1027,7 @@ app.get('/api/backup/export', async (c) => {
   ]);
 
   return c.json({
-    version: '1.0.0',
+    version: '1.1.0',
     exported_at: new Date().toISOString(),
     settings,
     monitors: monitors.results || [],
@@ -1130,7 +1140,7 @@ app.post('/api/backup/import', async (c) => {
 app.post('/api/cron/run', async (c) => {
   const summary = await runScheduledChecks(c.env.uf_db, {
     forceAll: true,
-    emailBinding: c.env.EMAIL,
+    notifierEnv: c.env,
   });
   invalidateAggregateStatsCache();
   return c.json(summary);
@@ -1151,7 +1161,7 @@ export default {
     ctx.waitUntil(
       (async () => {
         await ensureSchema(env.uf_db);
-        const summary = await runScheduledChecks(env.uf_db, { emailBinding: env.EMAIL });
+        const summary = await runScheduledChecks(env.uf_db, { notifierEnv: env });
         if (summary.checkedCount > 0) {
           invalidateAggregateStatsCache();
         }

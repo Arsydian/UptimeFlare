@@ -1,4 +1,19 @@
-import { CheckResult, MonitorRow, NotificationChannelRow } from './types';
+import { CheckResult, Env, MonitorRow, NotificationChannelRow } from './types';
+
+export type NotifierEnv = Partial<
+  Pick<
+    Env,
+    | 'EMAIL'
+    | 'POSTLET_API_URL'
+    | 'POSTLET_API_KEY'
+    | 'POSTLET_FROM_EMAIL'
+    | 'POSTLET_CF_ACCESS_CLIENT_ID'
+    | 'POSTLET_CF_ACCESS_CLIENT_SECRET'
+    | 'CF_ACCESS_CLIENT_ID'
+    | 'CF_ACCESS_CLIENT_SECRET'
+    | 'POSTLET_SERVICE_AUTH_SECRET'
+  >
+>;
 
 export interface AlertEvent {
   monitor: {
@@ -38,6 +53,161 @@ function toBase64Utf8(input: string): string {
 function extractEmailAddress(raw: string): string {
   const match = raw.match(/<([^>]+)>/);
   return (match ? match[1] : raw).trim();
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export function normalizePostletSendUrl(rawUrl: string): string {
+  const trimmed = rawUrl.trim().replace(/\/+$/, '');
+  if (!trimmed) return '';
+  if (trimmed.endsWith('/api/v1/messages/send')) {
+    return trimmed;
+  }
+  if (trimmed.endsWith('/api/v1')) {
+    return `${trimmed}/messages/send`;
+  }
+  return `${trimmed}/api/v1/messages/send`;
+}
+
+export function buildAlertHtml(title: string, alert: AlertEvent, summaryLines: string[]): string {
+  const accent =
+    alert.event === 'test' ? '#f38020' : alert.event === 'up' ? '#10b981' : '#ef4444';
+  const rowsHtml = summaryLines
+    .map((line) => {
+      const idx = line.indexOf(':');
+      if (idx <= 0) {
+        return `<li style="margin:4px 0;">${escapeHtml(line)}</li>`;
+      }
+      const key = line.slice(0, idx).trim();
+      const val = line.slice(idx + 1).trim();
+      return `<li style="margin:4px 0;"><strong>${escapeHtml(key)}:</strong> ${escapeHtml(val)}</li>`;
+    })
+    .join('');
+
+  return [
+    '<div style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:16px;border:1px solid #e5e7eb;border-radius:10px;">',
+    `<div style="border-left:4px solid ${accent};padding-left:12px;margin-bottom:12px;">`,
+    `<h2 style="margin:0;font-size:16px;color:#111827;">${escapeHtml(title)}</h2>`,
+    `<p style="margin:4px 0 0;font-size:12px;color:#6b7280;">Group: ${escapeHtml(alert.monitor.group_name)}</p>`,
+    '</div>',
+    `<ul style="padding-left:18px;margin:0;font-size:13px;line-height:1.5;color:#1f2937;">${rowsHtml}</ul>`,
+    '</div>',
+  ].join('');
+}
+
+export async function sendPostletEmail(
+  options: {
+    apiUrl: string;
+    apiKey: string;
+    fromEmail?: string;
+    to: string[];
+    subject: string;
+    textBody: string;
+    htmlBody: string;
+    cfAccessClientId?: string;
+    cfAccessClientSecret?: string;
+    serviceAuthSecret?: string;
+  },
+  fetchFn?: typeof fetch
+): Promise<{ ok: boolean; error?: string }> {
+  const endpointUrl = normalizePostletSendUrl(options.apiUrl);
+  if (!endpointUrl) {
+    return {
+      ok: false,
+      error: 'Missing Postlet Base URL (set POSTLET_API_URL secret or channel URL)',
+    };
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(endpointUrl);
+  } catch {
+    return { ok: false, error: 'Invalid Postlet API URL' };
+  }
+  if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
+    return { ok: false, error: 'Postlet API URL must use http:// or https://' };
+  }
+
+  if (!options.apiKey) {
+    return {
+      ok: false,
+      error: 'Missing Postlet Agent API key (set POSTLET_API_KEY secret or channel API key)',
+    };
+  }
+  if (options.to.length === 0) {
+    return { ok: false, error: 'Missing recipient To email address' };
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+    Authorization: `Bearer ${options.apiKey}`,
+  };
+
+  if (options.cfAccessClientId && options.cfAccessClientSecret) {
+    headers['CF-Access-Client-Id'] = options.cfAccessClientId;
+    headers['CF-Access-Client-Secret'] = options.cfAccessClientSecret;
+  }
+  if (options.serviceAuthSecret) {
+    headers['X-Postlet-Service-Secret'] = options.serviceAuthSecret;
+  }
+
+  const normalizedFrom = options.fromEmail ? extractEmailAddress(options.fromEmail) : '';
+  const body = JSON.stringify({
+    ...(normalizedFrom ? { fromAddress: normalizedFrom } : {}),
+    to: options.to.map((addr) => extractEmailAddress(addr)),
+    subject: options.subject,
+    textBody: options.textBody,
+    htmlBody: options.htmlBody,
+  });
+
+  const caller: typeof fetch =
+    !fetchFn || fetchFn === globalThis.fetch
+      ? (input, init) => globalThis.fetch(input, init)
+      : (input, init) => fetchFn(input, init);
+
+  // Use redirect: 'manual' so Service Auth / Bearer credentials are never forwarded cross-origin
+  // and Cloudflare Access login redirects fail immediately with a clear diagnostic message.
+  const res = await caller(parsedUrl.toString(), {
+    method: 'POST',
+    headers,
+    body,
+    redirect: 'manual',
+  });
+
+  if (res.status >= 300 && res.status < 400) {
+    return {
+      ok: false,
+      error: `Postlet blocked by Cloudflare Access redirect (HTTP ${res.status}). Check Service Auth policy & CF_ACCESS_CLIENT_ID/SECRET.`,
+    };
+  }
+
+  const contentType = (res.headers.get('Content-Type') || '').toLowerCase();
+  if (!res.ok) {
+    if (contentType.includes('text/html')) {
+      return {
+        ok: false,
+        error: `Postlet returned HTML error page (HTTP ${res.status}). Verify Cloudflare Access Service Auth credentials.`,
+      };
+    }
+    let detail = '';
+    try {
+      const errJson = (await res.json()) as { error?: string };
+      detail = errJson?.error ? `: ${errJson.error}` : '';
+    } catch {
+      detail = '';
+    }
+    return { ok: false, error: `Postlet API HTTP ${res.status}${detail}` };
+  }
+
+  return { ok: true };
 }
 
 async function sendSmtpEmail(options: {
@@ -271,7 +441,8 @@ async function sendCloudflareRoutingEmail(options: {
 export async function dispatchChannelAlert(
   channel: NotificationChannelRow,
   alert: AlertEvent,
-  emailBinding?: SendEmail
+  notifierEnv?: NotifierEnv,
+  fetchFn?: typeof fetch
 ): Promise<{ ok: boolean; error?: string }> {
   let config: Record<string, string> = {};
   try {
@@ -301,6 +472,49 @@ export async function dispatchChannelAlert(
 
   try {
     switch (channel.provider) {
+      case 'postlet': {
+        const apiUrl = (config.api_url || notifierEnv?.POSTLET_API_URL || '').trim();
+        const apiKey = (config.api_key || notifierEnv?.POSTLET_API_KEY || '').trim();
+        const fromEmail = (config.from_email || notifierEnv?.POSTLET_FROM_EMAIL || '').trim();
+        const toList = (config.to_email || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const cfAccessClientId = (
+          config.cf_access_client_id ||
+          notifierEnv?.POSTLET_CF_ACCESS_CLIENT_ID ||
+          notifierEnv?.CF_ACCESS_CLIENT_ID ||
+          ''
+        ).trim();
+        const cfAccessClientSecret = (
+          config.cf_access_client_secret ||
+          notifierEnv?.POSTLET_CF_ACCESS_CLIENT_SECRET ||
+          notifierEnv?.CF_ACCESS_CLIENT_SECRET ||
+          ''
+        ).trim();
+        const serviceAuthSecret = (
+          config.service_auth_secret ||
+          notifierEnv?.POSTLET_SERVICE_AUTH_SECRET ||
+          ''
+        ).trim();
+
+        return await sendPostletEmail(
+          {
+            apiUrl,
+            apiKey,
+            fromEmail: fromEmail || undefined,
+            to: toList,
+            subject: `[UptimeFlare] ${title}`,
+            textBody: plainText,
+            htmlBody: buildAlertHtml(title, alert, summaryLines),
+            cfAccessClientId: cfAccessClientId || undefined,
+            cfAccessClientSecret: cfAccessClientSecret || undefined,
+            serviceAuthSecret: serviceAuthSecret || undefined,
+          },
+          fetchFn
+        );
+      }
+
       case 'cf-email': {
         const from = (config.from_email || '').trim();
         const toList = (config.to_email || '')
@@ -316,7 +530,7 @@ export async function dispatchChannelAlert(
         }
 
         return await sendCloudflareRoutingEmail({
-          emailBinding,
+          emailBinding: notifierEnv?.EMAIL,
           from,
           to: toList,
           subject: `[UptimeFlare] ${title}`,
@@ -582,7 +796,8 @@ export async function notifyMonitorTransition(
   event: 'down' | 'up',
   result: CheckResult,
   downtimeSeconds?: number,
-  emailBinding?: SendEmail
+  notifierEnv?: NotifierEnv,
+  fetchFn?: typeof fetch
 ): Promise<void> {
   const { results: channels } = await db
     .prepare('SELECT * FROM notification_channels WHERE active = 1')
@@ -621,6 +836,6 @@ export async function notifyMonitorTransition(
   };
 
   await Promise.allSettled(
-    targetChannels.map((ch) => dispatchChannelAlert(ch, alertPayload, emailBinding))
+    targetChannels.map((ch) => dispatchChannelAlert(ch, alertPayload, notifierEnv, fetchFn))
   );
 }

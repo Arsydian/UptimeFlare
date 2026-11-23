@@ -1,11 +1,17 @@
 import React, { useRef, useState } from 'react';
 import { Bell, Download, Plus, Send, Settings, Trash2, Upload, X } from 'lucide-react';
 import { api } from '../api';
-import { NotificationChannel, NotificationProvider, SiteSettings } from '../types';
+import {
+  NotificationChannel,
+  NotificationProvider,
+  PostletEnvStatus,
+  SiteSettings,
+} from '../types';
 
 interface SettingsModalProps {
   settings: SiteSettings;
   channels: NotificationChannel[];
+  postletEnv?: PostletEnvStatus;
   onClose: () => void;
   onRefresh: () => Promise<void>;
 }
@@ -13,6 +19,7 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
   channels,
+  postletEnv,
   onClose,
   onRefresh,
 }) => {
@@ -37,7 +44,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Alert Channels State
   const [channelName, setChannelName] = useState('');
-  const [provider, setProvider] = useState<NotificationProvider>('cf-email');
+  const [provider, setProvider] = useState<NotificationProvider>('postlet');
   const [webhookUrl, setWebhookUrl] = useState('');
   const [botToken, setBotToken] = useState('');
   const [chatId, setChatId] = useState('');
@@ -47,6 +54,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [pushoverUser, setPushoverUser] = useState('');
   const [secretHeader, setSecretHeader] = useState('');
   const [secretValue, setSecretValue] = useState('');
+
+  // Postlet Mail API fields
+  const [postletUrl, setPostletUrl] = useState('');
+  const [postletCfClientId, setPostletCfClientId] = useState('');
+  const [postletCfClientSecret, setPostletCfClientSecret] = useState('');
+  const [postletServiceSecret, setPostletServiceSecret] = useState('');
 
   // SMTP & Email API fields
   const [smtpHost, setSmtpHost] = useState('');
@@ -131,6 +144,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const buildAlertConfig = (): Record<string, string> => {
     switch (provider) {
+      case 'postlet':
+        return {
+          ...(postletUrl.trim() ? { api_url: postletUrl.trim() } : {}),
+          ...(emailApiKey.trim() ? { api_key: emailApiKey.trim() } : {}),
+          ...(fromEmail.trim() ? { from_email: fromEmail.trim() } : {}),
+          to_email: toEmail.trim(),
+          ...(postletCfClientId.trim() ? { cf_access_client_id: postletCfClientId.trim() } : {}),
+          ...(postletCfClientSecret.trim()
+            ? { cf_access_client_secret: postletCfClientSecret.trim() }
+            : {}),
+          ...(postletServiceSecret.trim()
+            ? { service_auth_secret: postletServiceSecret.trim() }
+            : {}),
+        };
       case 'cf-email':
         return {
           from_email: fromEmail.trim(),
@@ -213,6 +240,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setNtfyTopic('');
       setSmtpPass('');
       setEmailApiKey('');
+      setPostletCfClientSecret('');
+      setPostletServiceSecret('');
       await onRefresh();
       setAlertFeedback({ type: 'ok', text: 'Notification channel added.' });
     } catch (err) {
@@ -541,7 +570,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     value={provider}
                     onChange={(e) => setProvider(e.target.value as NotificationProvider)}
                   >
-                    <option value="cf-email">Cloudflare Email Routing (Native Free Binding)</option>
+                    <option value="postlet">Postlet Mail API (Recommended)</option>
+                    <option value="cf-email">Cloudflare Email Routing (Legacy Native Binding)</option>
                     <option value="smtp">Email (Direct SMTP / STARTTLS / SSL)</option>
                     <option value="email">Email API (Resend / SendGrid)</option>
                     <option value="discord">Discord Webhook</option>
@@ -563,6 +593,132 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onChange={(e) => setChannelName(e.target.value)}
                   />
                 </div>
+
+                {provider === 'postlet' && (
+                  <>
+                    <div className="form-field">
+                      <label className="form-label">
+                        Postlet Base URL {postletEnv?.api_url ? '(Env Default Set)' : ''}
+                      </label>
+                      <input
+                        type="url"
+                        className="form-input mono"
+                        placeholder={
+                          postletEnv?.api_url
+                            ? 'Using POSTLET_API_URL Worker secret'
+                            : 'https://mail.phnxlabs.dev'
+                        }
+                        value={postletUrl}
+                        onChange={(e) => setPostletUrl(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label className="form-label">
+                        Postlet Agent API Key {postletEnv?.api_key ? '(Env Secret Set)' : ''}
+                      </label>
+                      <input
+                        type="password"
+                        className="form-input mono"
+                        placeholder={
+                          postletEnv?.api_key
+                            ? 'Using POSTLET_API_KEY Worker secret'
+                            : 'plt_...'
+                        }
+                        value={emailApiKey}
+                        onChange={(e) => setEmailApiKey(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label className="form-label">
+                        From Email (Optional Alias{postletEnv?.from_email ? ', Env Set' : ''})
+                      </label>
+                      <input
+                        type="text"
+                        className="form-input mono"
+                        placeholder={
+                          postletEnv?.from_email
+                            ? 'Using POSTLET_FROM_EMAIL Worker secret'
+                            : 'uptime@phnxlabs.dev'
+                        }
+                        value={fromEmail}
+                        onChange={(e) => setFromEmail(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label className="form-label">To Email (Comma-separated)</label>
+                      <input
+                        type="text"
+                        className="form-input mono"
+                        placeholder="admin@example.com, ops@example.com"
+                        value={toEmail}
+                        onChange={(e) => setToEmail(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label className="form-label">
+                        CF Access Client ID (Optional Override)
+                      </label>
+                      <input
+                        type="text"
+                        className="form-input mono"
+                        placeholder={
+                          postletEnv?.cf_service_auth
+                            ? 'Using POSTLET_CF_ACCESS_CLIENT_ID secret'
+                            : 'Optional: <id>.access'
+                        }
+                        value={postletCfClientId}
+                        onChange={(e) => setPostletCfClientId(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label className="form-label">
+                        CF Access Client Secret (Optional Override)
+                      </label>
+                      <input
+                        type="password"
+                        className="form-input mono"
+                        placeholder={
+                          postletEnv?.cf_service_auth
+                            ? 'Using POSTLET_CF_ACCESS_CLIENT_SECRET secret'
+                            : 'Optional service token secret'
+                        }
+                        value={postletCfClientSecret}
+                        onChange={(e) => setPostletCfClientSecret(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-field full">
+                      <label className="form-label">
+                        Postlet Shared Service Secret (Optional Override)
+                      </label>
+                      <input
+                        type="password"
+                        className="form-input mono"
+                        placeholder={
+                          postletEnv?.service_auth_secret
+                            ? 'Using POSTLET_SERVICE_AUTH_SECRET Worker secret'
+                            : 'Optional X-Postlet-Service-Secret header value'
+                        }
+                        value={postletServiceSecret}
+                        onChange={(e) => setPostletServiceSecret(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-field full">
+                      <span className="form-hint">
+                        Sends alerts via Postlet&apos;s provider-independent{' '}
+                        <code>POST /api/v1/messages/send</code> endpoint using whichever outbound
+                        provider Postlet uses (Resend, Cloudflare Email Sending, or Amazon SES).
+                        Worker Secrets status:{' '}
+                        <strong>URL</strong>: {postletEnv?.api_url ? 'set' : 'unset'} ·{' '}
+                        <strong>API Key</strong>: {postletEnv?.api_key ? 'set' : 'unset'} ·{' '}
+                        <strong>CF Service Auth</strong>:{' '}
+                        {postletEnv?.cf_service_auth ? 'set' : 'unset'} ·{' '}
+                        <strong>Shared Secret</strong>:{' '}
+                        {postletEnv?.service_auth_secret ? 'set' : 'unset'}.
+                      </span>
+                    </div>
+                  </>
+                )}
 
                 {provider === 'cf-email' && (
                   <>

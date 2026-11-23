@@ -13,6 +13,7 @@ import {
   Incident,
   Monitor,
   NotificationChannel,
+  PostletEnvStatus,
   SiteSettings,
 } from './types';
 
@@ -33,6 +34,7 @@ export const App: React.FC = () => {
   const [monitors, setMonitors] = useState<Monitor[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [notifications, setNotifications] = useState<NotificationChannel[]>([]);
+  const [postletEnv, setPostletEnv] = useState<PostletEnvStatus | undefined>(undefined);
   const [selectedMonitorId, setSelectedMonitorId] = useState<number | null>(null);
 
   const [loading, setLoading] = useState(!isStatusRoute);
@@ -57,6 +59,7 @@ export const App: React.FC = () => {
       setMonitors(data.monitors);
       setIncidents(data.incidents);
       setNotifications(data.notifications);
+      setPostletEnv(data.postlet_env);
       setAuthError(null);
       setDbBindingError(null);
     } catch (err) {
@@ -308,6 +311,7 @@ export const App: React.FC = () => {
         <SettingsModal
           settings={settings}
           channels={notifications}
+          postletEnv={postletEnv}
           onClose={() => setSettingsOpen(false)}
           onRefresh={fetchDashboard}
         />

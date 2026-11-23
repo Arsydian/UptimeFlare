@@ -1,5 +1,5 @@
 import { executeMonitorCheck } from './checker';
-import { notifyMonitorTransition } from './notifier';
+import { NotifierEnv, notifyMonitorTransition } from './notifier';
 import { CheckResult, IncidentRow, MonitorRow, MonitorStatus } from './types';
 
 /**
@@ -10,7 +10,7 @@ export async function processSingleMonitorCheck(
   db: D1Database,
   monitor: MonitorRow,
   overrideResult?: CheckResult,
-  emailBinding?: SendEmail
+  notifierEnv?: NotifierEnv
 ): Promise<{
   monitorId: number;
   previousStatus: MonitorStatus;
@@ -81,7 +81,7 @@ export async function processSingleMonitorCheck(
         .run();
     }
 
-    await notifyMonitorTransition(db, monitor, 'down', result, undefined, emailBinding);
+    await notifyMonitorTransition(db, monitor, 'down', result, undefined, notifierEnv);
   } else if (newStatus === 'up' && prevStatus === 'down') {
     // Resolve open incident
     const openIncident = await db
@@ -98,7 +98,7 @@ export async function processSingleMonitorCheck(
         .run();
     }
 
-    await notifyMonitorTransition(db, monitor, 'up', result, downtimeSeconds, emailBinding);
+    await notifyMonitorTransition(db, monitor, 'up', result, downtimeSeconds, notifierEnv);
   }
 
   return {
@@ -115,7 +115,7 @@ export async function processSingleMonitorCheck(
  */
 export async function runScheduledChecks(
   db: D1Database,
-  options?: { forceAll?: boolean; emailBinding?: SendEmail }
+  options?: { forceAll?: boolean; notifierEnv?: NotifierEnv }
 ): Promise<{
   checkedCount: number;
   results: Array<{ monitorId: number; newStatus: MonitorStatus; latencyMs: number }>;
@@ -145,7 +145,7 @@ export async function runScheduledChecks(
   const batchToCheck = targetMonitors.slice(0, 35);
 
   const checkOutcomes = await Promise.allSettled(
-    batchToCheck.map((m) => processSingleMonitorCheck(db, m, undefined, options?.emailBinding))
+    batchToCheck.map((m) => processSingleMonitorCheck(db, m, undefined, options?.notifierEnv))
   );
 
   const summary: Array<{ monitorId: number; newStatus: MonitorStatus; latencyMs: number }> = [];

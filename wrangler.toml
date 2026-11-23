@@ -27,9 +27,9 @@ binding = "uf_db"
 database_name = "uf_db"
 migrations_dir = "migrations"
 
-# Optional: Cloudflare Email Routing (Send Email) Binding for native zero-key email notifications.
-# You can either uncomment the block below or attach a Send Email binding named `EMAIL` directly in the
-# Cloudflare Dashboard (Workers & Pages -> uptimeflare -> Settings -> Bindings -> Add -> Send Email).
-[[send_email]]
-name = "EMAIL"
+# Recommended: Configure a `postlet` channel in Settings -> Alerts (backed by POSTLET_* Worker Secrets)
+# instead of `[[send_email]]` when Postlet handles your domain email routing.
+# Optional legacy Cloudflare Email Routing (Send Email) binding:
+# [[send_email]]
+# name = "EMAIL"
 
