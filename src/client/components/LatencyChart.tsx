@@ -33,17 +33,45 @@ export const LatencyChart: React.FC<LatencyChartProps> = ({
     const avg = Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length);
 
     const upperBound = Math.ceil(max * 1.15);
+    const minTs = heartbeats[0].timestamp;
+    const maxTs = heartbeats[heartbeats.length - 1].timestamp;
+    const tsSpan = maxTs - minTs;
+
     const points = heartbeats.map((beat, idx) => {
-      const x =
+      const ratio =
         heartbeats.length === 1
-          ? padLeft + plotW / 2
-          : padLeft + (idx / (heartbeats.length - 1)) * plotW;
+          ? 0.5
+          : tsSpan > 0
+            ? (beat.timestamp - minTs) / tsSpan
+            : idx / (heartbeats.length - 1);
+      const x = padLeft + ratio * plotW;
       const y = padTop + plotH - (beat.latency_ms / upperBound) * plotH;
       return { x, y, beat };
     });
 
-    return { min, max: upperBound, avg, points };
-  }, [heartbeats, plotW, plotH]);
+    const formatAxisTime = (ts: number) => {
+      const d = new Date(ts);
+      if (range === '7d') {
+        return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      }
+      return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    };
+
+    const xTicks =
+      tsSpan > 0
+        ? [
+            { x: padLeft, label: formatAxisTime(minTs), anchor: 'start' as const },
+            {
+              x: padLeft + plotW / 2,
+              label: formatAxisTime(minTs + tsSpan / 2),
+              anchor: 'middle' as const,
+            },
+            { x: padLeft + plotW, label: formatAxisTime(maxTs), anchor: 'end' as const },
+          ]
+        : [{ x: padLeft + plotW / 2, label: formatAxisTime(minTs), anchor: 'middle' as const }];
+
+    return { min, max: upperBound, avg, points, xTicks };
+  }, [heartbeats, plotW, plotH, range]);
 
   const polylinePoints = stats.points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
   const areaPath =
@@ -146,6 +174,21 @@ export const LatencyChart: React.FC<LatencyChartProps> = ({
               );
             })}
 
+            {/* X-Axis Time Labels */}
+            {stats.xTicks?.map((tick, idx) => (
+              <text
+                key={idx}
+                x={tick.x}
+                y={height - 6}
+                textAnchor={tick.anchor}
+                fill="var(--text-muted)"
+                fontSize="10.5"
+                className="mono"
+              >
+                {tick.label}
+              </text>
+            ))}
+
             {/* Area & Line */}
             {areaPath && <path d={areaPath} fill="url(#cfLatencyGrad)" />}
             {stats.points.length > 1 && (
@@ -169,9 +212,9 @@ export const LatencyChart: React.FC<LatencyChartProps> = ({
                   fill={pt.beat.status === 'down' ? 'var(--status-down)' : '#ff5e1f'}
                 />
                 <rect
-                  x={pt.x - Math.max(plotW / stats.points.length / 2, 4)}
+                  x={pt.x - Math.max(plotW / stats.points.length / 2, 3)}
                   y={padTop}
-                  width={Math.max(plotW / stats.points.length, 8)}
+                  width={Math.max(plotW / stats.points.length, 6)}
                   height={plotH}
                   fill="transparent"
                   style={{ cursor: 'crosshair' }}

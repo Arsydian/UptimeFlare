@@ -535,21 +535,37 @@ app.get('/api/dashboard', async (c) => {
 
 app.get('/api/monitors/:id/history', async (c) => {
   const id = Number(c.req.param('id'));
-  const range = c.req.query('range') || '24h';
+  const range = c.req.query('range') === '7d' ? '7d' : '24h';
   const now = Date.now();
-  const cutoff =
-    range === '7d' ? now - 7 * 24 * 60 * 60 * 1000 : now - 24 * 60 * 60 * 1000;
+  const windowMs = range === '7d' ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+  const cutoff = now - windowMs;
+  // Bucket to span the entire requested window (~288 points for 24h, ~336 points for 7d)
+  // while reading strictly from the idx_heartbeats_stats covering index.
+  const bucketMs = range === '7d' ? 30 * 60 * 1000 : 5 * 60 * 1000;
 
   const [beatsRes, incidentsRes] = await Promise.all([
     c.env.uf_db.prepare(
-      `SELECT id, monitor_id, status, latency_ms, status_code, message, timestamp
+      `SELECT
+         CAST(timestamp / ? AS INTEGER) AS bucket,
+         MAX(timestamp) AS timestamp,
+         ROUND(AVG(latency_ms)) AS latency_ms,
+         COUNT(*) AS sample_count,
+         SUM(CASE WHEN status = 'down' THEN 1 ELSE 0 END) AS down_count,
+         SUM(CASE WHEN status = 'degraded' THEN 1 ELSE 0 END) AS degraded_count
        FROM heartbeats
        WHERE monitor_id = ? AND timestamp >= ?
-       ORDER BY timestamp ASC
-       LIMIT 500`
+       GROUP BY bucket
+       ORDER BY bucket ASC`
     )
-      .bind(id, cutoff)
-      .all<HeartbeatRow>(),
+      .bind(bucketMs, id, cutoff)
+      .all<{
+        bucket: number;
+        timestamp: number;
+        latency_ms: number;
+        sample_count: number;
+        down_count: number;
+        degraded_count: number;
+      }>(),
     c.env.uf_db.prepare(
       `SELECT * FROM incidents WHERE monitor_id = ? ORDER BY started_at DESC LIMIT 30`
     )
@@ -557,8 +573,34 @@ app.get('/api/monitors/:id/history', async (c) => {
       .all<IncidentRow>(),
   ]);
 
+  const heartbeats: HeartbeatRow[] = (beatsRes.results || []).map((row) => {
+    const downCount = Number(row.down_count) || 0;
+    const degradedCount = Number(row.degraded_count) || 0;
+    const sampleCount = Number(row.sample_count) || 1;
+    const status: HeartbeatRow['status'] =
+      downCount > 0 ? 'down' : degradedCount > 0 ? 'degraded' : 'up';
+    const message =
+      downCount > 0
+        ? `${downCount}/${sampleCount} checks down`
+        : degradedCount > 0
+          ? `${degradedCount}/${sampleCount} checks degraded`
+          : sampleCount > 1
+            ? `OK (${sampleCount} checks avg)`
+            : 'OK';
+
+    return {
+      id: Number(row.bucket),
+      monitor_id: id,
+      status,
+      latency_ms: Math.round(Number(row.latency_ms) || 0),
+      status_code: downCount > 0 ? 500 : 200,
+      message,
+      timestamp: Number(row.timestamp),
+    };
+  });
+
   return c.json({
-    heartbeats: beatsRes.results || [],
+    heartbeats,
     incidents: incidentsRes.results || [],
   });
 });
